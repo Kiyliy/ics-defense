@@ -177,13 +177,50 @@ export function createAnalysisRouter({
  * 查询攻击链列表
  */
   router.get('/chains', (/** @type {any} */ req, /** @type {any} */ res) => {
-    const chains = req.db.prepare(`
-      SELECT c.*, d.risk_level, d.recommendation, d.action_type
+    const db = req.db;
+    const rawChains = db.prepare(`
+      SELECT c.*
       FROM attack_chains c
-      LEFT JOIN decisions d ON d.attack_chain_id = c.id
       ORDER BY c.created_at DESC
       LIMIT 50
     `).all();
+
+    const getAlerts = db.prepare(`SELECT id, title, severity, src_ip FROM alerts WHERE id IN (SELECT value FROM json_each(?))`);
+    const getDecisions = db.prepare(`SELECT * FROM decisions WHERE attack_chain_id = ?`);
+
+    const chains = rawChains.map((/** @type {any} */ c) => {
+      // Parse alert_ids and fetch related alerts
+      let alertIds = [];
+      try { alertIds = JSON.parse(c.alert_ids || '[]'); } catch { /* ignore */ }
+      const alerts = alertIds.length > 0 ? getAlerts.all(c.alert_ids) : [];
+
+      // Fetch decisions for this chain
+      const decisions = getDecisions.all(c.id);
+
+      // Derive alert_count and status
+      const alert_count = alertIds.length;
+      const pendingDecisions = decisions.filter((/** @type {any} */ d) => d.status === 'pending');
+      const status = decisions.length === 0 ? 'new' : pendingDecisions.length > 0 ? 'pending' : 'resolved';
+
+      const primaryDecision = decisions[0] || null;
+      const risk_level = primaryDecision?.risk_level || c.risk_level || 'medium';
+      const recommendation = primaryDecision?.recommendation || null;
+      const action_type = primaryDecision?.action_type || null;
+      const decision_status = primaryDecision?.status || null;
+
+      return {
+        ...c,
+        alerts,
+        decisions,
+        alert_count,
+        status,
+        risk_level,
+        recommendation,
+        action_type,
+        decision_status,
+      };
+    });
+
     res.json({ chains });
   });
 

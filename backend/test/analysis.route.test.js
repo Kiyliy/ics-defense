@@ -132,6 +132,8 @@ test('analysis chains endpoint joins decisions and decisions patch validates sta
     assert.equal(chainsResp.status, 200);
     assert.equal(chains.chains.length, 1);
     assert.equal(chains.chains[0].recommendation, 'block now');
+    assert.equal(chains.chains[0].action_type, 'block');
+    assert.equal(chains.chains[0].decision_status, 'pending');
     assert.equal(chains.chains[0].risk_level, 'high');
 
     const invalidPatch = await fetchJson(`${baseUrl}/api/analysis/decisions/${decisionId}`, {
