@@ -95,6 +95,46 @@ class TestMCPClient:
         mock_session.call_tool.assert_called_once_with("search_alerts", {"severity": "high"})
 
     @pytest.mark.asyncio
+    async def test_call_tool_joins_multiple_text_chunks(self):
+        """多个文本片段应按换行拼接，忽略顺序外的包装逻辑 bug"""
+        client = MCPClient()
+        mock_session = AsyncMock()
+
+        first = MagicMock()
+        first.text = "chunk-1"
+        second = MagicMock()
+        second.text = "chunk-2"
+
+        mock_result = MagicMock()
+        mock_result.content = [first, second]
+        mock_session.call_tool.return_value = mock_result
+
+        client._sessions = {"memory": mock_session}
+        client._tool_map = {"recall_memory": "memory"}
+
+        result = await client.call_tool("recall_memory", {"query": "sql injection"})
+
+        assert result == "chunk-1\nchunk-2"
+
+    @pytest.mark.asyncio
+    async def test_call_tool_ignores_non_text_content(self):
+        """当 MCP 返回非文本内容时，不应抛错，应返回空字符串"""
+        client = MCPClient()
+        mock_session = AsyncMock()
+
+        image_like = MagicMock(spec=[])
+        mock_result = MagicMock()
+        mock_result.content = [image_like]
+        mock_session.call_tool.return_value = mock_result
+
+        client._sessions = {"mitre-kb": mock_session}
+        client._tool_map = {"lookup_technique": "mitre-kb"}
+
+        result = await client.call_tool("lookup_technique", {"technique_id": "T0866"})
+
+        assert result == ""
+
+    @pytest.mark.asyncio
     async def test_refresh_tools(self):
         """refresh_tools 从 session 获取工具列表并构建映射"""
         client = MCPClient()

@@ -219,11 +219,22 @@ def _persist_analysis_result(trace_id: str, alert_ids: list[int], result: dict) 
     """将 Agent 分析结果写回业务表，便于前端统一查询。"""
     conn = _get_db_connection()
     try:
-        chain_name = None
+        risk_level = result.get("risk_level", "unknown")
+        confidence = float(result.get("confidence", 0))
+        recommendation = result.get("recommendation", "")
+        action_type = result.get("action_type", "investigate")
+        rationale = result.get("rationale", "")
+
+        # Build a meaningful chain name from the attack_chain's first technique
         attack_chain = result.get("attack_chain") or []
+        first_technique = None
+        first_stage = None
         if attack_chain and isinstance(attack_chain, list):
-            first_stage = attack_chain[0] if isinstance(attack_chain[0], dict) else {}
-            chain_name = first_stage.get("stage")
+            entry = attack_chain[0] if isinstance(attack_chain[0], dict) else {}
+            first_technique = entry.get("technique")
+            first_stage = entry.get("stage")
+
+        chain_name = f"{risk_level.upper()}: {first_technique or 'Alert Analysis'}"
 
         conn.execute(
             """
@@ -231,11 +242,11 @@ def _persist_analysis_result(trace_id: str, alert_ids: list[int], result: dict) 
             VALUES (?, ?, ?, ?, ?)
             """,
             (
-                chain_name or result.get("risk_level") or "Unknown Chain",
-                chain_name or "unknown",
-                float(result.get("confidence") or 0),
+                chain_name,
+                first_stage or "unknown",
+                confidence,
                 json.dumps(alert_ids, ensure_ascii=False),
-                result.get("rationale") or "",
+                rationale,
             ),
         )
         attack_chain_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -247,16 +258,16 @@ def _persist_analysis_result(trace_id: str, alert_ids: list[int], result: dict) 
             """,
             (
                 attack_chain_id,
-                result.get("risk_level") or "medium",
-                result.get("recommendation") or "",
-                result.get("action_type") or "investigate",
-                result.get("rationale") or "",
+                risk_level,
+                recommendation,
+                action_type,
+                rationale,
             ),
         )
 
         conn.executemany(
             "UPDATE alerts SET status = ? WHERE id = ?",
-            [("analyzing", alert_id) for alert_id in alert_ids],
+            [("analyzed", alert_id) for alert_id in alert_ids],
         )
         conn.commit()
     finally:

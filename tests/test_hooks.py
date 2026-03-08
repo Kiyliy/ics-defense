@@ -100,6 +100,17 @@ class TestEvaluateCondition:
     def test_invalid_condition(self, manager):
         assert not manager.evaluate_condition("???", {})
 
+    def test_string_numeric_type_mismatch_returns_false(self, manager):
+        """字符串数字与真实数值比较时不应抛异常"""
+        assert not manager.evaluate_condition(
+            "consecutive_errors >= 3", {"consecutive_errors": "3"}
+        )
+
+    def test_float_numeric_comparison(self, manager):
+        """浮点数阈值应按数值比较，而不是字符串比较"""
+        assert manager.evaluate_condition("confidence >= 0.8", {"confidence": 0.85})
+        assert not manager.evaluate_condition("confidence >= 0.8", {"confidence": 0.79})
+
 
 class TestTrigger:
     def test_critical_alert_triggers_hook(self, manager):
@@ -167,6 +178,24 @@ class TestTrigger:
         asyncio.get_event_loop().run_until_complete(
             manager.trigger("on_nonexistent_event", {"foo": "bar"})
         )
+
+    def test_unknown_action_is_ignored(self, hooks_yaml):
+        """配置中存在未知 action 时，trigger 应忽略而不是中断"""
+        with open(hooks_yaml, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+
+        config["hooks"]["on_alert_received"].append(
+            {"condition": "always", "action": "totally_unknown_action"}
+        )
+
+        with open(hooks_yaml, "w", encoding="utf-8") as f:
+            yaml.dump(config, f, allow_unicode=True)
+
+        manager = HookManager(config_path=hooks_yaml)
+        asyncio.get_event_loop().run_until_complete(
+            manager.trigger("on_alert_received", {"severity": "critical"})
+        )
+        assert len(manager.get_hooks("on_alert_received")) == 2
 
     def test_config_hot_reload(self, hooks_yaml, manager):
         """修改 yaml 后重新触发，新配置生效"""

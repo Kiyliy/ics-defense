@@ -30,11 +30,12 @@ ICS_TECHNIQUES = [
     {"id": "T0846", "name": "Remote System Discovery", "name_zh": "远程系统发现", "tactic": "TA0106", "description": "扫描发现网络中的其他系统，包括端口扫描"},
     {"id": "T0812", "name": "Default Credentials", "name_zh": "默认凭证", "tactic": "TA0109", "description": "使用设备默认凭证进行横向移动"},
     {"id": "T0882", "name": "Theft of Operational Information", "name_zh": "运营信息窃取", "tactic": "TA0110", "description": "窃取工控系统运行数据和配置信息"},
-    {"id": "T0855", "name": "Unauthorized Command Message", "name_zh": "未授权指令", "tactic": "TA0108", "description": "向工控设备发送未授权的控制指令"},
+    {"id": "T0855", "name": "Unauthorized Command Message", "name_zh": "未授权指令", "tactic": "TA0108", "description": "攻击者发送未授权的命令消息来指示控制系统资产执行超出其预期功能的操作，或在不具备逻辑前提条件的情况下发出命令", "platforms": ["Control Server", "Field Controller/RTU/PLC/IED", "Safety Instrumented System/Protection Relay"]},
     {"id": "T0831", "name": "Manipulation of Control", "name_zh": "控制操纵", "tactic": "TA0108", "description": "操纵工业控制系统的控制逻辑"},
     {"id": "T0879", "name": "Damage to Property", "name_zh": "财产损坏", "tactic": "TA0040", "description": "导致物理设备或设施损坏"},
     {"id": "T0813", "name": "Denial of Control", "name_zh": "控制拒绝", "tactic": "TA0040", "description": "阻止操作员控制工控系统"},
     {"id": "T0826", "name": "Loss of Availability", "name_zh": "可用性丧失", "tactic": "TA0040", "description": "导致工控系统不可用"},
+    {"id": "T0803", "name": "Block Command Message", "name_zh": "阻断命令消息", "tactic": "TA0107", "description": "攻击者阻断命令消息以阻止对紧急情况或过程故障的自动或操作员响应，可导致控制拒绝。适用于串行和以太网工控通信协议", "platforms": ["Control Server", "Field Controller/RTU/PLC/IED"], "data_sources": ["Network Traffic", "Packet Capture"], "mitigations": ["Network Segmentation", "Communication Authenticity", "Network Allowlists"]},
 ]
 
 # 关键词到技术的映射（用于 map_alert_to_mitre）
@@ -47,6 +48,7 @@ KEYWORD_TECHNIQUE_MAP = {
     "数据外泄|exfiltration|数据窃取": "T0882",
     "固件|firmware": "T0839",
     "未授权|unauthorized|非法指令": "T0855",
+    "阻断命令|block command|命令阻断|阻断消息": "T0803",
     "拒绝服务|dos|denial": "T0826",
     "水坑|drive-by|钓鱼": "T0817",
     "api调用|api exploit": "T0871",
