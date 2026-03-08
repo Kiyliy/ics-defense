@@ -5,10 +5,9 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import express from 'express';
 import { createNotificationsRouter } from '../src/routes/notifications.js';
-import { createNotificationService } from '../src/services/notifications/service.js';
 import { initDB } from '../src/models/db.js';
 
-async function withTestServer(run, { env = {}, fetchFn } = {}) {
+async function withTestServer(run, { queue, notificationService } = {}) {
   const tempDir = mkdtempSync(join(tmpdir(), 'ics-defense-notifications-'));
   const db = initDB(join(tempDir, 'data', 'test.db'));
   const app = express();
@@ -18,11 +17,10 @@ async function withTestServer(run, { env = {}, fetchFn } = {}) {
     next();
   });
 
-  const notificationService = createNotificationService({
-    env: { ...process.env, ...env },
-    fetchFn,
-  });
-  app.use('/api/notifications', createNotificationsRouter({ notificationService }));
+  app.use('/api/notifications', createNotificationsRouter({
+    notificationQueue: queue,
+    notificationService,
+  }));
 
   const server = await new Promise((resolve) => {
     const instance = app.listen(0, () => resolve(instance));
@@ -39,6 +37,14 @@ async function withTestServer(run, { env = {}, fetchFn } = {}) {
 }
 
 test('GET /api/notifications/providers returns enabled providers', async () => {
+  const notificationService = {
+    listProviders: () => [
+      { name: 'noop', enabled: true, is_default: false },
+      { name: 'feishu', enabled: true, is_default: true },
+      { name: 'feishu-app', enabled: false, is_default: false },
+    ],
+  };
+
   await withTestServer(async ({ baseUrl }) => {
     const response = await fetch(`${baseUrl}/api/notifications/providers`);
     const body = await response.json();
@@ -47,17 +53,16 @@ test('GET /api/notifications/providers returns enabled providers', async () => {
     assert.equal(body.providers.some((provider) => provider.name === 'noop'), true);
     assert.equal(body.providers.some((provider) => provider.name === 'feishu'), true);
     assert.equal(body.providers.some((provider) => provider.name === 'feishu-app'), true);
-  });
+  }, { notificationService, queue: { enqueue: async () => ({ stream_id: '0-0', stream_key: 'ics:notifications' }) } });
 });
 
-test('POST /api/notifications/test sends text through Feishu adapter', async () => {
-  const requests = [];
-  const fetchFn = async (url, options) => {
-    requests.push({ url, options });
-    return new Response(JSON.stringify({ code: 0, msg: 'success', data: {} }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+test('POST /api/notifications/test enqueues notification jobs', async () => {
+  const queued = [];
+  const queue = {
+    enqueue: async (payload) => {
+      queued.push(payload);
+      return { stream_id: '1-0', stream_key: 'ics:notifications' };
+    },
   };
 
   await withTestServer(async ({ baseUrl }) => {
@@ -71,42 +76,22 @@ test('POST /api/notifications/test sends text through Feishu adapter', async () 
     });
     const body = await response.json();
 
-    assert.equal(response.status, 200);
-    assert.equal(body.provider, 'feishu');
-    assert.equal(body.delivered, true);
-    assert.equal(requests.length, 1);
-    assert.equal(requests[0].url, 'https://example.com/webhook');
-
-    const payload = JSON.parse(requests[0].options.body);
-    assert.equal(payload.msg_type, 'text');
-    assert.equal(payload.content.text, 'hello feishu');
-  }, {
-    env: {
-      FEISHU_BOT_WEBHOOK_URL: 'https://example.com/webhook',
-      FEISHU_BOT_SECRET: 'demo-secret',
-      NOTIFICATION_PROVIDER: 'feishu',
-    },
-    fetchFn,
-  });
+    assert.equal(response.status, 202);
+    assert.equal(body.queued, true);
+    assert.equal(body.stream_id, '1-0');
+    assert.equal(queued.length, 1);
+    assert.equal(queued[0].provider, 'feishu');
+    assert.equal(queued[0].text, 'hello feishu');
+  }, { queue, notificationService: { listProviders: () => [] } });
 });
 
-
-
-test('POST /api/notifications/test sends text through Feishu app bot adapter', async () => {
-  const requests = [];
-  const fetchFn = async (url, options) => {
-    requests.push({ url, options });
-    if (String(url).includes('/auth/v3/tenant_access_token/internal')) {
-      return new Response(JSON.stringify({ code: 0, msg: 'ok', tenant_access_token: 't-demo', expire: 7200 }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    return new Response(JSON.stringify({ code: 0, msg: 'success', data: { message_id: 'om_demo' } }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+test('POST /api/notifications/test can enqueue feishu-app jobs', async () => {
+  const queued = [];
+  const queue = {
+    enqueue: async (payload) => {
+      queued.push(payload);
+      return { stream_id: '2-0', stream_key: 'ics:notifications' };
+    },
   };
 
   await withTestServer(async ({ baseUrl }) => {
@@ -116,47 +101,28 @@ test('POST /api/notifications/test sends text through Feishu app bot adapter', a
       body: JSON.stringify({
         provider: 'feishu-app',
         text: 'hello app bot',
+        receive_id: 'oc_demo_chat',
+        receive_id_type: 'chat_id',
       }),
     });
     const body = await response.json();
 
-    assert.equal(response.status, 200);
-    assert.equal(body.provider, 'feishu-app');
-    assert.equal(body.delivered, true);
-    assert.equal(requests.length, 2);
-    assert.match(String(requests[0].url), /tenant_access_token\/internal/);
-    assert.match(String(requests[1].url), /im\/v1\/messages\?receive_id_type=chat_id/);
-
-    const tokenPayload = JSON.parse(requests[0].options.body);
-    assert.equal(tokenPayload.app_id, 'cli_demo');
-    assert.equal(tokenPayload.app_secret, 'secret_demo');
-
-    const msgPayload = JSON.parse(requests[1].options.body);
-    assert.equal(msgPayload.receive_id, 'oc_demo_chat');
-    assert.equal(msgPayload.msg_type, 'text');
-    assert.equal(JSON.parse(msgPayload.content).text, 'hello app bot');
-    assert.equal(requests[1].options.headers.Authorization, 'Bearer t-demo');
-  }, {
-    env: {
-      FEISHU_APP_ID: 'cli_demo',
-      FEISHU_APP_SECRET: 'secret_demo',
-      FEISHU_APP_RECEIVE_ID: 'oc_demo_chat',
-      FEISHU_APP_RECEIVE_ID_TYPE: 'chat_id',
-      NOTIFICATION_PROVIDER: 'feishu-app',
-    },
-    fetchFn,
-  });
+    assert.equal(response.status, 202);
+    assert.equal(body.queued, true);
+    assert.equal(queued.length, 1);
+    assert.equal(queued[0].provider, 'feishu-app');
+    assert.equal(queued[0].receive_id, 'oc_demo_chat');
+  }, { queue, notificationService: { listProviders: () => [] } });
 });
 
-test('POST /api/notifications/alerts/:id/send formats alert content', async () => {
-  const fetchFn = async (_url, options) => new Response(JSON.stringify({
-    code: 0,
-    msg: 'success',
-    echoed: JSON.parse(options.body),
-  }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  });
+test('POST /api/notifications/alerts/:id/send enqueues alert notifications', async () => {
+  const queued = [];
+  const queue = {
+    enqueue: async (payload) => {
+      queued.push(payload);
+      return { stream_id: '3-0', stream_key: 'ics:notifications' };
+    },
+  };
 
   await withTestServer(async ({ db, baseUrl }) => {
     const inserted = db.prepare(`
@@ -171,17 +137,12 @@ test('POST /api/notifications/alerts/:id/send formats alert content', async () =
     });
     const body = await response.json();
 
-    assert.equal(response.status, 200);
-    assert.equal(body.provider, 'feishu');
+    assert.equal(response.status, 202);
     assert.equal(body.alert_id, Number(inserted.lastInsertRowid));
-    assert.equal(body.request.msg_type, 'post');
-    assert.equal(body.request.content.post.zh_cn.title, '告警通知：SQL Injection');
-    assert.match(body.request.content.post.zh_cn.content[0][0].text, /等级：high/);
-  }, {
-    env: {
-      FEISHU_BOT_WEBHOOK_URL: 'https://example.com/webhook',
-      NOTIFICATION_PROVIDER: 'feishu',
-    },
-    fetchFn,
-  });
+    assert.equal(body.queued, true);
+    assert.equal(queued.length, 1);
+    assert.equal(queued[0].msg_type, 'post');
+    assert.equal(queued[0].title, '告警通知：SQL Injection');
+    assert.match(queued[0].body, /等级：high/);
+  }, { queue, notificationService: { listProviders: () => [] } });
 });
