@@ -215,4 +215,8 @@ export const getNotificationRules = () => request(http.get('/notifications/rules
 export const saveNotificationRule = (data) => request(http.put('/notifications/rules', data))
 export const getNotificationHistory = (params) => request(http.get('/notifications/history', { params }))
 
+// Settings
+export const getSettings = () => request(http.get('/settings'))
+export const updateSettings = (data) => request(http.put('/settings', data))
+
 export default http
