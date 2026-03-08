@@ -288,6 +288,7 @@ curl -X POST http://localhost:3000/api/notifications/alerts/1/send \
 ### PM2 管理约定
 
 - 当前开发环境中的后端服务由 `PM2` 管理，进程名为 `ics-backend`
+- 如果 `Redis` 跑在 Docker 中而 `backend`/worker 跑在宿主机 PM2 下，`REDIS_URL` 需要指向宿主机映射端口（当前开发环境为 `redis://127.0.0.1:16380`）
 - 修改 `backend/.env` 或后端代码后，优先执行 `pm2 restart ics-backend --update-env`
 - 不要额外手工启动新的 `node src/server.js` 实例，避免端口 `3002` 冲突
 - 常用检查命令：`pm2 list`、`pm2 describe ics-backend`、`pm2 logs ics-backend --lines 100`、`pm2 logs ics-notification-worker --lines 100`

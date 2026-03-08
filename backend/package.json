@@ -16,5 +16,8 @@
     "express": "^4.21.0",
     "openai": "^4.80.0",
     "redis": "^4.7.1"
+  },
+  "devDependencies": {
+    "c8": "^11.0.0"
   }
 }
