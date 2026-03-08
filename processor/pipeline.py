@@ -281,6 +281,7 @@ class Pipeline:
             alert = normalize(source, raw)
             self._store_raw_event(source, raw)
             self._clusterer.add(alert.to_dict())
+            self._pending_count += 1
 
         return await self.flush()
 

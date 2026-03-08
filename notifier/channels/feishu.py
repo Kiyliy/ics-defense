@@ -50,6 +50,7 @@ def _generate_sign(secret: str, timestamp: str) -> str:
     string_to_sign = f"{timestamp}\n{secret}"
     hmac_code = hmac.new(
         string_to_sign.encode("utf-8"),
+        msg=b"",
         digestmod=hashlib.sha256,
     ).digest()
     return base64.b64encode(hmac_code).decode("utf-8")

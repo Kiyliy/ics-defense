@@ -93,9 +93,20 @@ const SCHEMA = `
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE INDEX IF NOT EXISTS idx_alerts_asset ON alerts(asset_id);
+  CREATE INDEX IF NOT EXISTS idx_alerts_raw_event ON alerts(raw_event_id);
+  CREATE INDEX IF NOT EXISTS idx_decisions_chain ON decisions(attack_chain_id);
   CREATE INDEX IF NOT EXISTS idx_approval_status ON approval_queue(status);
   CREATE INDEX IF NOT EXISTS idx_audit_trace ON audit_logs(trace_id);
   CREATE INDEX IF NOT EXISTS idx_audit_alert ON audit_logs(alert_id);
+
+  -- 系统配置表：存储可动态调整的业务参数
+  CREATE TABLE IF NOT EXISTS system_config (
+    key         TEXT PRIMARY KEY,
+    value       TEXT NOT NULL,
+    description TEXT,
+    updated_at  TEXT DEFAULT (datetime('now'))
+  );
 `;
 
 /**
@@ -106,6 +117,7 @@ export function initDB(dbPath) {
   mkdirSync(dirname(dbPath), { recursive: true });
   const db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
   return db;
 }

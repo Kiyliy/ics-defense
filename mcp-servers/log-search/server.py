@@ -40,31 +40,33 @@ def search_alerts(
         JSON 格式的告警列表
     """
     db = get_db()
-    query = "SELECT * FROM alerts WHERE created_at >= datetime('now', ?)"
-    params: list = [f"-{hours} hours"]
+    try:
+        query = "SELECT * FROM alerts WHERE created_at >= datetime('now', ?)"
+        params: list = [f"-{hours} hours"]
 
-    if severity:
-        query += " AND severity = ?"
-        params.append(severity)
-    if src_ip:
-        query += " AND src_ip = ?"
-        params.append(src_ip)
-    if dst_ip:
-        query += " AND dst_ip = ?"
-        params.append(dst_ip)
-    if source:
-        query += " AND source = ?"
-        params.append(source)
-    if status:
-        query += " AND status = ?"
-        params.append(status)
+        if severity:
+            query += " AND severity = ?"
+            params.append(severity)
+        if src_ip:
+            query += " AND src_ip = ?"
+            params.append(src_ip)
+        if dst_ip:
+            query += " AND dst_ip = ?"
+            params.append(dst_ip)
+        if source:
+            query += " AND source = ?"
+            params.append(source)
+        if status:
+            query += " AND status = ?"
+            params.append(status)
 
-    query += " ORDER BY created_at DESC LIMIT ?"
-    params.append(limit)
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
 
-    rows = db.execute(query, params).fetchall()
-    db.close()
-    return json.dumps([dict(r) for r in rows], ensure_ascii=False, default=str)
+        rows = db.execute(query, params).fetchall()
+        return json.dumps([dict(r) for r in rows], ensure_ascii=False, default=str)
+    finally:
+        db.close()
 
 
 @mcp.tool()
@@ -84,19 +86,21 @@ def search_raw_events(
         JSON 格式的原始事件列表
     """
     db = get_db()
-    query = "SELECT * FROM raw_events WHERE received_at >= datetime('now', ?)"
-    params: list = [f"-{hours} hours"]
+    try:
+        query = "SELECT * FROM raw_events WHERE received_at >= datetime('now', ?)"
+        params: list = [f"-{hours} hours"]
 
-    if source:
-        query += " AND source = ?"
-        params.append(source)
+        if source:
+            query += " AND source = ?"
+            params.append(source)
 
-    query += " ORDER BY received_at DESC LIMIT ?"
-    params.append(limit)
+        query += " ORDER BY received_at DESC LIMIT ?"
+        params.append(limit)
 
-    rows = db.execute(query, params).fetchall()
-    db.close()
-    return json.dumps([dict(r) for r in rows], ensure_ascii=False, default=str)
+        rows = db.execute(query, params).fetchall()
+        return json.dumps([dict(r) for r in rows], ensure_ascii=False, default=str)
+    finally:
+        db.close()
 
 
 @mcp.tool()
@@ -114,58 +118,57 @@ def get_alert_context(
         JSON: {"target_alert": {...}, "context_alerts": [...], "raw_events": [...]}
     """
     db = get_db()
+    try:
+        # 1. 查询目标告警
+        target = db.execute("SELECT * FROM alerts WHERE id = ?", [alert_id]).fetchone()
+        if not target:
+            return json.dumps(
+                {"error": f"Alert {alert_id} not found"}, ensure_ascii=False
+            )
 
-    # 1. 查询目标告警
-    target = db.execute("SELECT * FROM alerts WHERE id = ?", [alert_id]).fetchone()
-    if not target:
+        target_dict = dict(target)
+        created_at = target_dict["created_at"]
+
+        # 2. 获取时间窗口内的所有告警（排除自身）
+        context_alerts_rows = db.execute(
+            """SELECT * FROM alerts
+               WHERE id != ?
+                 AND created_at >= datetime(?, ?)
+                 AND created_at <= datetime(?, ?)
+               ORDER BY created_at""",
+            [
+                alert_id,
+                created_at,
+                f"-{window_minutes} minutes",
+                created_at,
+                f"+{window_minutes} minutes",
+            ],
+        ).fetchall()
+
+        # 3. 获取相同 src_ip 或 dst_ip 的原始事件
+        raw_events_rows = []
+        ip_conditions = []
+        ip_params: list = [created_at, f"-{window_minutes} minutes",
+                           created_at, f"+{window_minutes} minutes"]
+
+        if target_dict.get("src_ip"):
+            ip_conditions.append("raw_json LIKE ?")
+            ip_params.append(f"%{target_dict['src_ip']}%")
+        if target_dict.get("dst_ip"):
+            ip_conditions.append("raw_json LIKE ?")
+            ip_params.append(f"%{target_dict['dst_ip']}%")
+
+        if ip_conditions:
+            raw_query = (
+                "SELECT * FROM raw_events"
+                " WHERE received_at >= datetime(?, ?)"
+                "   AND received_at <= datetime(?, ?)"
+                f"  AND ({' OR '.join(ip_conditions)})"
+                " ORDER BY received_at"
+            )
+            raw_events_rows = db.execute(raw_query, ip_params).fetchall()
+    finally:
         db.close()
-        return json.dumps(
-            {"error": f"Alert {alert_id} not found"}, ensure_ascii=False
-        )
-
-    target_dict = dict(target)
-    created_at = target_dict["created_at"]
-
-    # 2. 获取时间窗口内的所有告警（排除自身）
-    context_alerts_rows = db.execute(
-        """SELECT * FROM alerts
-           WHERE id != ?
-             AND created_at >= datetime(?, ?)
-             AND created_at <= datetime(?, ?)
-           ORDER BY created_at""",
-        [
-            alert_id,
-            created_at,
-            f"-{window_minutes} minutes",
-            created_at,
-            f"+{window_minutes} minutes",
-        ],
-    ).fetchall()
-
-    # 3. 获取相同 src_ip 或 dst_ip 的原始事件
-    raw_events_rows = []
-    ip_conditions = []
-    ip_params: list = [created_at, f"-{window_minutes} minutes",
-                       created_at, f"+{window_minutes} minutes"]
-
-    if target_dict.get("src_ip"):
-        ip_conditions.append("raw_json LIKE ?")
-        ip_params.append(f"%{target_dict['src_ip']}%")
-    if target_dict.get("dst_ip"):
-        ip_conditions.append("raw_json LIKE ?")
-        ip_params.append(f"%{target_dict['dst_ip']}%")
-
-    if ip_conditions:
-        raw_query = (
-            "SELECT * FROM raw_events"
-            " WHERE received_at >= datetime(?, ?)"
-            "   AND received_at <= datetime(?, ?)"
-            f"  AND ({' OR '.join(ip_conditions)})"
-            " ORDER BY received_at"
-        )
-        raw_events_rows = db.execute(raw_query, ip_params).fetchall()
-
-    db.close()
 
     return json.dumps(
         {

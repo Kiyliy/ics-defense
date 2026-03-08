@@ -144,8 +144,11 @@ class AlertConsumer:
 
     def _ack(self, message_id: str):
         """ACK 一条已处理的消息。"""
-        client = self._get_redis()
-        client.xack(self.stream_key, self.group, message_id)
+        try:
+            client = self._get_redis()
+            client.xack(self.stream_key, self.group, message_id)
+        except Exception as exc:
+            logger.error("ACK 消息失败 (%s): %s", message_id, exc)
 
     # ------------------------------------------------------------------
     # 公开接口

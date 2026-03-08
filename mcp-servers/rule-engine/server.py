@@ -153,7 +153,10 @@ def _check_rule(rule: dict, alerts: list) -> dict | None:
 
 
 def _check_sequence_rule(rule: dict, alerts: list) -> dict | None:
-    """Check a sequence-based rule where alerts must appear in order."""
+    """Check a sequence-based rule where alerts must appear in order.
+
+    Also validates the ``within_hours`` time window between consecutive steps.
+    """
     conditions = rule["conditions"]
     same_field = conditions.get("same_field")
     sequence = conditions["sequence"]
@@ -169,7 +172,7 @@ def _check_sequence_rule(rule: dict, alerts: list) -> dict | None:
             groups.setdefault(key, []).append(a)
 
     for key, group in groups.items():
-        # Try to find the sequence in order
+        # Try to find the sequence in order, respecting within_hours
         matched_alerts = []
         seq_idx = 0
         for a in group:
@@ -177,6 +180,20 @@ def _check_sequence_rule(rule: dict, alerts: list) -> dict | None:
                 break
             step = sequence[seq_idx]
             if _matches_title(a, step["title_pattern"]):
+                # 检查时间窗口：当前步骤与上一步骤之间的时间差
+                if matched_alerts and step.get("within_hours"):
+                    prev_time = matched_alerts[-1].get("created_at") or matched_alerts[-1].get("timestamp")
+                    curr_time = a.get("created_at") or a.get("timestamp")
+                    if prev_time and curr_time:
+                        try:
+                            from datetime import datetime
+                            t1 = datetime.fromisoformat(str(prev_time).replace("Z", "+00:00"))
+                            t2 = datetime.fromisoformat(str(curr_time).replace("Z", "+00:00"))
+                            diff_hours = abs((t2 - t1).total_seconds()) / 3600
+                            if diff_hours > step["within_hours"]:
+                                continue  # 超出时间窗口，跳过
+                        except (ValueError, TypeError):
+                            pass  # 时间解析失败时不做时间窗口限制
                 matched_alerts.append(a)
                 seq_idx += 1
 
@@ -215,7 +232,10 @@ def match_rules(alerts: list[dict] | str) -> str:
         JSON: {"matched_rules": [{"rule": {...}, "matched_alerts": [...], "evidence": "..."}]}
     """
     if isinstance(alerts, str):
-        alerts = json.loads(alerts)
+        try:
+            alerts = json.loads(alerts)
+        except (json.JSONDecodeError, TypeError) as exc:
+            return json.dumps({"error": f"alerts JSON 解析失败: {exc}"}, ensure_ascii=False)
     matched = []
     for rule in CORRELATION_RULES:
         result = _check_rule(rule, alerts)

@@ -4,6 +4,7 @@ import { Router } from 'express';
 import { createNotificationQueue, createRedisConnection } from '../services/notifications/queue.js';
 import { createNotificationService } from '../services/notifications/service.js';
 import { NotificationError } from '../services/notifications/errors.js';
+import { asyncHandler } from '../middleware/asyncHandler.js';
 
 function buildAlertNotification(alert) {
   return {
@@ -32,32 +33,43 @@ function getStatusCode(error) {
   return 500;
 }
 
+/**
+ * Factory function — dependencies are lazily created only when called,
+ * not at module import time (avoids Redis connection side effects on import).
+ */
 export function createNotificationsRouter({
-  notificationQueue = createNotificationQueue({ client: createRedisConnection({ redisUrl: process.env.REDIS_URL || 'redis://127.0.0.1:6379' }) }),
-  notificationService = createNotificationService(),
+  notificationQueue,
+  notificationService,
 } = {}) {
+  // Lazy initialization: only connect when router is actually created
+  const queue = notificationQueue || createNotificationQueue({
+    client: createRedisConnection({ redisUrl: process.env.REDIS_URL || 'redis://127.0.0.1:6379' }),
+  });
+  const service = notificationService || createNotificationService();
+
   const router = Router();
 
   router.get('/providers', (_req, res) => {
-    res.json({ providers: notificationService.listProviders() });
+    res.json({ providers: service.listProviders() });
   });
 
-  router.post('/test', async (req, res) => {
+  router.post('/test', asyncHandler(async (req, res) => {
     const payload = (({ provider, title, body, text, msg_type, card, receive_id, receive_id_type }) => ({ provider, title, body, text, msg_type, card, receive_id, receive_id_type }))(req.body || {});
     if (!payload.text && !payload.body && !payload.title && !payload.card) {
       return res.status(400).json({ error: 'text, body, title or card is required' });
     }
 
     try {
-      notificationService.validatePayload(payload);
-      const result = await notificationQueue.enqueue(payload);
+      service.validatePayload(payload);
+      const result = await queue.enqueue(payload);
       res.status(202).json({ queued: true, ...result });
     } catch (error) {
-      res.status(getStatusCode(error)).json({ error: error instanceof Error ? error.message : String(error) });
+      const msg = error instanceof NotificationError ? error.message : 'Notification service error';
+      res.status(getStatusCode(error)).json({ error: msg });
     }
-  });
+  }));
 
-  router.post('/alerts/:id/send', async (req, res) => {
+  router.post('/alerts/:id/send', asyncHandler(async (req, res) => {
     const alert = req.db.prepare('SELECT * FROM alerts WHERE id = ?').get(req.params.id);
     if (!alert) {
       return res.status(404).json({ error: 'Alert not found' });
@@ -71,15 +83,14 @@ export function createNotificationsRouter({
     };
 
     try {
-      notificationService.validatePayload(payload);
-      const result = await notificationQueue.enqueue(payload);
+      service.validatePayload(payload);
+      const result = await queue.enqueue(payload);
       res.status(202).json({ alert_id: alert.id, queued: true, ...result });
     } catch (error) {
-      res.status(getStatusCode(error)).json({ error: error instanceof Error ? error.message : String(error) });
+      const msg = error instanceof NotificationError ? error.message : 'Notification service error';
+      res.status(getStatusCode(error)).json({ error: msg });
     }
-  });
+  }));
 
   return router;
 }
-
-export default createNotificationsRouter();

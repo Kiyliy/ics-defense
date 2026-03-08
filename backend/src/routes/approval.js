@@ -51,6 +51,8 @@ router.get('/:id', (/** @type {any} */ req, /** @type {any} */ res) => {
  * PATCH /api/approval/:id
  * 审批操作：approved / rejected
  * Body: { status: "approved" | "rejected", reason: "可选原因" }
+ *
+ * Uses atomic UPDATE ... WHERE status = 'pending' to prevent TOCTOU race conditions.
  */
 router.patch('/:id', (/** @type {any} */ req, /** @type {any} */ res) => {
   const { status, reason } = req.body;
@@ -60,18 +62,31 @@ router.patch('/:id', (/** @type {any} */ req, /** @type {any} */ res) => {
     return res.status(400).json({ error: 'status must be approved or rejected' });
   }
 
-  const current = db.prepare('SELECT * FROM approval_queue WHERE id = ?').get(req.params.id);
-  if (!current) {
-    return res.status(404).json({ error: 'Approval not found' });
-  }
-  if (current.status !== 'pending') {
-    return res.status(400).json({ error: 'Only pending approvals can be updated' });
+  const now = new Date().toISOString();
+
+  // Atomic update: only succeeds if current status is 'pending'
+  const result = db.prepare(
+    'UPDATE approval_queue SET status = ?, reason = COALESCE(?, reason), responded_at = ? WHERE id = ? AND status = ?'
+  ).run(status, reason || null, now, req.params.id, 'pending');
+
+  if (result.changes === 0) {
+    // Distinguish between not found and already processed
+    const exists = db.prepare('SELECT id, status FROM approval_queue WHERE id = ?').get(req.params.id);
+    if (!exists) {
+      return res.status(404).json({ error: 'Approval not found' });
+    }
+    return res.status(400).json({ error: `Approval already processed (status: ${exists.status})` });
   }
 
-  const now = new Date().toISOString();
+  // Write audit log
   db.prepare(
-    'UPDATE approval_queue SET status = ?, reason = COALESCE(?, reason), responded_at = ? WHERE id = ?'
-  ).run(status, reason || null, now, req.params.id);
+    `INSERT INTO audit_logs (trace_id, alert_id, event_type, data) VALUES (?, ?, ?, ?)`
+  ).run(
+    `approval-${req.params.id}`,
+    '',
+    'approval_decision',
+    JSON.stringify({ approval_id: req.params.id, status, reason: reason || null })
+  );
 
   const updated = db.prepare('SELECT * FROM approval_queue WHERE id = ?').get(req.params.id);
   res.json(updated);

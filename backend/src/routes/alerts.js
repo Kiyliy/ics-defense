@@ -20,6 +20,10 @@ function parseNonNegativeInteger(rawValue, fieldName) {
   return { ok: true, value };
 }
 
+/** @type {string[]} */
+const VALID_SOURCES = ['waf', 'nids', 'hids', 'pikachu', 'soc'];
+const MAX_INGEST_EVENTS = 1000;
+
 /**
  * POST /api/alerts/ingest
  * 多源事件接入：接收原始日志，规范化后存入数据库
@@ -30,6 +34,15 @@ router.post('/ingest', (/** @type {any} */ req, /** @type {any} */ res) => {
   const { source, events } = req.body;
   if (!source || !Array.isArray(events)) {
     return res.status(400).json({ error: 'source and events[] required' });
+  }
+  if (!VALID_SOURCES.includes(source)) {
+    return res.status(400).json({ error: `source must be one of: ${VALID_SOURCES.join(', ')}` });
+  }
+  if (events.length === 0) {
+    return res.status(400).json({ error: 'events[] must not be empty' });
+  }
+  if (events.length > MAX_INGEST_EVENTS) {
+    return res.status(400).json({ error: `events[] exceeds max batch size (${MAX_INGEST_EVENTS})` });
   }
 
   const db = req.db;
@@ -53,7 +66,12 @@ router.post('/ingest', (/** @type {any} */ req, /** @type {any} */ res) => {
     }
   });
 
-  batchInsert();
+  try {
+    batchInsert();
+  } catch (err) {
+    console.error('Ingest batch failed:', err);
+    return res.status(500).json({ error: 'Failed to ingest events' });
+  }
   res.json({ ingested: results.length, alerts: results });
 });
 
@@ -112,18 +130,51 @@ router.get('/:id', (/** @type {any} */ req, /** @type {any} */ res) => {
 });
 
 /**
+ * Valid alert state transitions: open → analyzing → analyzed → resolved
+ * @type {Record<string, string[]>}
+ */
+const VALID_TRANSITIONS = {
+  open: ['analyzing'],
+  analyzing: ['analyzed', 'open'],     // allow rollback to open on failure
+  analyzed: ['resolved', 'open'],      // allow reopen
+  resolved: ['open'],                  // allow reopen
+};
+
+/**
  * PATCH /api/alerts/:id/status
- * 更新告警状态（人工反馈闭环）
+ * 更新告警状态（人工反馈闭环），校验状态转换合法性
  */
 router.patch('/:id/status', (/** @type {any} */ req, /** @type {any} */ res) => {
   const { status } = req.body;
   if (!['open', 'analyzing', 'analyzed', 'resolved'].includes(status)) {
     return res.status(400).json({ error: 'Invalid status' });
   }
-  const result = req.db.prepare('UPDATE alerts SET status = ? WHERE id = ?').run(status, req.params.id);
-  if (result.changes === 0) {
+
+  const db = req.db;
+  const current = db.prepare('SELECT id, status FROM alerts WHERE id = ?').get(req.params.id);
+  if (!current) {
     return res.status(404).json({ error: 'Alert not found' });
   }
+
+  const allowed = VALID_TRANSITIONS[current.status] || [];
+  if (!allowed.includes(status)) {
+    return res.status(400).json({
+      error: `Invalid transition: ${current.status} → ${status}. Allowed: ${allowed.join(', ') || 'none'}`,
+    });
+  }
+
+  db.prepare('UPDATE alerts SET status = ? WHERE id = ?').run(status, req.params.id);
+
+  // Write audit log for status change
+  db.prepare(
+    `INSERT INTO audit_logs (trace_id, alert_id, event_type, data) VALUES (?, ?, ?, ?)`
+  ).run(
+    `manual-${Date.now()}`,
+    String(req.params.id),
+    'alert_status_change',
+    JSON.stringify({ from: current.status, to: status })
+  );
+
   res.json({ updated: true });
 });
 

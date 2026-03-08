@@ -56,7 +56,7 @@ def memorize(content: str, category: str = "analysis", metadata: str = "{}") -> 
         "id": memory_id,
         "content": content,
         "category": category,
-        "metadata": json.loads(metadata) if isinstance(metadata, str) else metadata,
+        "metadata": (json.loads(metadata) if isinstance(metadata, str) else metadata) if metadata else {},
         "created_at": datetime.now().isoformat()
     }
     memories.append(mem)
