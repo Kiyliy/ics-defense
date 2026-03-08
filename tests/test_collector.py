@@ -214,7 +214,8 @@ class TestClusterer:
 
     def test_cluster_preserves_time_range(self):
         """first_seen/last_seen 正确"""
-        clusterer = AlertClusterer()
+        # Use a large window (3h) so all alerts fit in one bucket
+        clusterer = AlertClusterer(window_seconds=10800)
         clusterer.add(self._make_alert(timestamp="2025-01-01T00:00:00+00:00"))
         clusterer.add(self._make_alert(timestamp="2025-01-01T01:00:00+00:00"))
         clusterer.add(self._make_alert(timestamp="2025-01-01T02:00:00+00:00"))
