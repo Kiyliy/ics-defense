@@ -1,52 +1,51 @@
 <template>
   <div>
     <div class="page-header">
-      <h2>审计日志</h2>
+      <div class="page-header-copy">
+        <h2>审计日志</h2>
+        <p class="page-subtitle">
+          审计模型调用、工具执行与 trace 级链路信息，为复盘、问责与规则优化提供高可信依据。
+        </p>
+      </div>
+      <div class="page-header-meta">
+        <span>Traceability</span>
+        <span>{{ totalLogCount }} Events</span>
+      </div>
     </div>
 
-    <!-- 筛选栏 -->
-    <el-card shadow="hover" style="margin-bottom: 16px">
-      <el-form :inline="true" :model="filters">
+    <el-card shadow="hover" class="filter-card">
+      <el-form :inline="true" :model="filters" class="filter-form">
         <el-form-item label="Trace ID">
-          <el-input
-            v-model="filters.trace_id"
-            placeholder="输入 Trace ID"
-            clearable
-            style="width: 240px"
-          />
+          <el-input v-model="filters.trace_id" placeholder="按 trace_id 筛选" clearable style="width: 220px" />
         </el-form-item>
         <el-form-item label="时间范围">
-          <el-select v-model="filters.days" style="width: 130px">
-            <el-option label="最近1天" :value="1" />
-            <el-option label="最近3天" :value="3" />
-            <el-option label="最近7天" :value="7" />
-            <el-option label="最近30天" :value="30" />
+          <el-select v-model="filters.days" style="width: 140px">
+            <el-option :value="1" label="最近 1 天" />
+            <el-option :value="7" label="最近 7 天" />
+            <el-option :value="30" label="最近 30 天" />
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="fetchLogs">
-            <el-icon><Search /></el-icon> 查询
-          </el-button>
+          <el-button type="primary" @click="fetchLogs(); fetchStats()">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
         </el-form-item>
       </el-form>
     </el-card>
 
-    <!-- 统计概览 -->
-    <el-row :gutter="16" style="margin-bottom: 16px">
-      <el-col :span="8">
+    <el-row :gutter="18" style="margin-bottom: 18px">
+      <el-col :xs="24" :md="8">
         <el-card shadow="hover" class="stat-mini">
           <div class="stat-mini-label">总分析次数</div>
           <div class="stat-mini-value">{{ auditStats.total_analyses || 0 }}</div>
         </el-card>
       </el-col>
-      <el-col :span="8">
+      <el-col :xs="24" :md="8">
         <el-card shadow="hover" class="stat-mini">
           <div class="stat-mini-label">总 Token 消耗</div>
           <div class="stat-mini-value">{{ (auditStats.total_input_tokens || 0) + (auditStats.total_output_tokens || 0) }}</div>
         </el-card>
       </el-col>
-      <el-col :span="8">
+      <el-col :xs="24" :md="8">
         <el-card shadow="hover" class="stat-mini">
           <div class="stat-mini-label">日志条数</div>
           <div class="stat-mini-value">{{ totalLogCount }}</div>
@@ -54,8 +53,14 @@
       </el-col>
     </el-row>
 
-    <!-- 日志列表 (按 trace_id 分组) -->
     <el-card shadow="hover">
+      <template #header>
+        <div class="section-title">
+          <span>Trace 分组日志</span>
+          <small>Grouped Event Timeline</small>
+        </div>
+      </template>
+
       <el-collapse v-model="expandedTraces" v-loading="loading">
         <el-collapse-item
           v-for="group in groupedLogs"
@@ -70,13 +75,10 @@
             </div>
           </template>
 
-          <el-table :data="group.events" size="small" border style="width: 100%">
+          <el-table :data="group.events" size="small" border class="data-table">
             <el-table-column prop="event_type" label="事件类型" width="160">
               <template #default="{ row }">
-                <el-tag
-                  :type="eventTypeColor(row.event_type)"
-                  size="small"
-                >
+                <el-tag :type="eventTypeColor(row.event_type)" size="small">
                   {{ row.event_type }}
                 </el-tag>
               </template>
@@ -85,11 +87,9 @@
               <template #default="{ row }">
                 <el-popover placement="top-start" :width="500" trigger="hover">
                   <template #reference>
-                    <span style="cursor: pointer; color: #409eff; font-size: 13px">
-                      {{ truncateData(row.data) }}
-                    </span>
+                    <span class="link-text">{{ truncateData(row.data) }}</span>
                   </template>
-                  <pre style="white-space: pre-wrap; font-size: 12px; max-height: 400px; overflow: auto">{{ formatData(row.data) }}</pre>
+                  <pre class="detail-pre">{{ formatData(row.data) }}</pre>
                 </el-popover>
               </template>
             </el-table-column>
@@ -212,37 +212,26 @@ watch(() => route.query, (query) => {
 <style scoped>
 .stat-mini {
   text-align: center;
-  padding: 8px;
+  padding: 10px;
 }
 
 .stat-mini-label {
-  font-size: 13px;
-  color: #909399;
-  margin-bottom: 4px;
+  font-size: 0.84rem;
+  color: #64748b;
+  margin-bottom: 6px;
 }
 
 .stat-mini-value {
-  font-size: 24px;
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: #0f172a;
+}
+
+.link-text {
+  cursor: pointer;
+  color: #2563eb;
+  font-size: 0.84rem;
   font-weight: 600;
-  color: #303133;
-}
-
-.trace-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-}
-
-.trace-count {
-  font-size: 13px;
-  color: #909399;
-}
-
-.trace-time {
-  font-size: 13px;
-  color: #c0c4cc;
-  margin-left: auto;
-  padding-right: 16px;
 }
 </style>

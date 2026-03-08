@@ -1,19 +1,33 @@
 <template>
   <div>
     <div class="page-header">
-      <h2>告警列表</h2>
+      <div class="page-header-copy">
+        <h2>告警列表</h2>
+        <p class="page-subtitle">
+          统一查看全域告警、按风险与来源快速过滤，并将关键事件直接送入 AI 研判与攻击链分析流程。
+        </p>
+      </div>
+      <div class="page-header-meta">
+        <span>Alert Triage</span>
+        <span>{{ store.total || 0 }} Total Records</span>
+      </div>
     </div>
 
-    <!-- 筛选栏 -->
-    <el-card shadow="hover" style="margin-bottom: 16px">
-      <el-form :inline="true" :model="store.filters">
+    <el-card shadow="hover" class="filter-card">
+      <div class="filter-summary">
+        <div class="filter-summary-item">
+          <strong>{{ store.total || 0 }}</strong>
+          <span>当前结果总数</span>
+        </div>
+        <div class="filter-summary-item">
+          <strong>{{ store.selectedIds.length }}</strong>
+          <span>已选待分析告警</span>
+        </div>
+      </div>
+
+      <el-form :inline="true" :model="store.filters" class="filter-form">
         <el-form-item label="等级">
-          <el-select
-            v-model="store.filters.severity"
-            placeholder="全部"
-            clearable
-            style="width: 130px"
-          >
+          <el-select v-model="store.filters.severity" placeholder="全部" clearable style="width: 140px">
             <el-option label="Critical" value="critical" />
             <el-option label="High" value="high" />
             <el-option label="Medium" value="medium" />
@@ -22,12 +36,7 @@
         </el-form-item>
 
         <el-form-item label="来源">
-          <el-select
-            v-model="store.filters.source"
-            placeholder="全部"
-            clearable
-            style="width: 130px"
-          >
+          <el-select v-model="store.filters.source" placeholder="全部" clearable style="width: 140px">
             <el-option label="WAF" value="waf" />
             <el-option label="NIDS" value="nids" />
             <el-option label="HIDS" value="hids" />
@@ -36,12 +45,7 @@
         </el-form-item>
 
         <el-form-item label="状态">
-          <el-select
-            v-model="store.filters.status"
-            placeholder="全部"
-            clearable
-            style="width: 130px"
-          >
+          <el-select v-model="store.filters.status" placeholder="全部" clearable style="width: 140px">
             <el-option label="Open" value="open" />
             <el-option label="Analyzing" value="analyzing" />
             <el-option label="Analyzed" value="analyzed" />
@@ -58,8 +62,8 @@
       </el-form>
     </el-card>
 
-    <!-- 操作栏 -->
-    <div style="margin-bottom: 12px; display: flex; gap: 8px">
+    <div class="toolbar-row">
+      <div class="metric-chip">Selected {{ store.selectedIds.length }}</div>
       <el-button
         type="warning"
         :disabled="store.selectedIds.length === 0"
@@ -70,14 +74,13 @@
       </el-button>
     </div>
 
-    <!-- 告警表格 -->
     <el-card shadow="hover">
       <el-table
         :data="store.alerts"
         v-loading="store.loading"
         stripe
+        class="data-table"
         @selection-change="handleSelectionChange"
-        style="width: 100%"
       >
         <el-table-column type="selection" width="50" />
         <el-table-column prop="id" label="ID" width="80" />
@@ -89,15 +92,12 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="title" label="告警标题" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="title" label="告警标题" min-width="240" show-overflow-tooltip />
         <el-table-column prop="src_ip" label="源IP" width="140" />
         <el-table-column prop="dst_ip" label="目标IP" width="140" />
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag
-              :type="getStatusTagType(row.status)"
-              size="small"
-            >
+            <el-tag :type="getStatusTagType(row.status)" size="small">
               {{ row.status }}
             </el-tag>
           </template>
@@ -112,7 +112,7 @@
         </el-table-column>
       </el-table>
 
-      <div style="margin-top: 16px; display: flex; justify-content: flex-end">
+      <div class="table-pagination">
         <el-pagination
           v-model:current-page="store.filters.page"
           v-model:page-size="store.filters.limit"
@@ -125,8 +125,7 @@
       </div>
     </el-card>
 
-    <!-- 详情弹窗 -->
-    <el-dialog v-model="detailVisible" title="告警详情" width="600px">
+    <el-dialog v-model="detailVisible" title="告警详情" width="680px">
       <el-descriptions :column="2" border v-if="currentDetail">
         <el-descriptions-item label="ID">{{ currentDetail.id }}</el-descriptions-item>
         <el-descriptions-item label="来源">{{ currentDetail.source }}</el-descriptions-item>
@@ -141,7 +140,7 @@
         <el-descriptions-item label="目标IP">{{ currentDetail.dst_ip }}</el-descriptions-item>
         <el-descriptions-item label="时间" :span="2">{{ currentDetail.created_at }}</el-descriptions-item>
         <el-descriptions-item label="原始数据" :span="2">
-          <pre style="white-space: pre-wrap; font-size: 12px; max-height: 200px; overflow: auto">{{ JSON.stringify(currentDetail.raw_data || currentDetail, null, 2) }}</pre>
+          <pre class="detail-pre">{{ JSON.stringify(currentDetail.raw_data || currentDetail, null, 2) }}</pre>
         </el-descriptions-item>
       </el-descriptions>
     </el-dialog>
@@ -180,7 +179,6 @@ async function handleAnalyze() {
     await store.fetchAlerts()
     if (res.trace_id) {
       ElMessage.success(`分析已提交，Trace ID: ${res.trace_id}`)
-      // Poll for analysis completion in background
       store.pollAnalysisResult(res.trace_id).then((result) => {
         if (result) {
           const riskLevel = result.risk_level || result.risk || '未知'
@@ -216,3 +214,11 @@ onMounted(() => {
   store.fetchAlerts()
 })
 </script>
+
+<style scoped>
+.table-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+</style>

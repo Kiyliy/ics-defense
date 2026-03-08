@@ -1,61 +1,73 @@
 <template>
-  <div>
+  <div class="dashboard-view">
     <div class="page-header">
-      <h2>指挥面板</h2>
+      <div class="page-header-copy">
+        <h2>指挥面板</h2>
+        <p class="page-subtitle">
+          面向工业控制防御场景的统一态势入口，聚合风险告警、处置待办、攻击链与趋势分析，帮助值守团队更快完成判断与响应。
+        </p>
+      </div>
+      <div class="page-header-meta">
+        <span>Threat Posture · Live</span>
+        <span>24/7 Security Operations</span>
+      </div>
     </div>
 
-    <!-- 统计卡片 -->
-    <el-row :gutter="16" style="margin-bottom: 20px">
-      <el-col :xs="12" :sm="6" v-for="card in statCards" :key="card.label">
+    <el-row :gutter="18" class="stats-row">
+      <el-col :xs="24" :sm="12" :xl="6" v-for="card in statCards" :key="card.label">
         <StatCard
           :label="card.label"
           :value="card.value"
           :icon="card.icon"
           :color="card.color"
+          :description="card.description"
         />
       </el-col>
     </el-row>
 
-    <!-- 告警趋势图 -->
-    <el-card shadow="hover" style="margin-bottom: 20px">
-      <template #header>
-        <span style="font-weight: 600">近 7 天告警趋势</span>
-      </template>
-      <div ref="chartRef" style="height: 320px"></div>
-    </el-card>
+    <div class="dashboard-grid">
+      <el-card shadow="hover" class="trend-card">
+        <template #header>
+          <div class="section-title">
+            <span>近 7 天告警趋势</span>
+            <small>Trend Intelligence</small>
+          </div>
+        </template>
+        <div ref="chartRef" class="trend-chart"></div>
+      </el-card>
 
-    <!-- 最近告警列表 -->
-    <el-card shadow="hover">
-      <template #header>
-        <div style="display: flex; justify-content: space-between; align-items: center">
-          <span style="font-weight: 600">最近告警</span>
-          <el-button text type="primary" @click="$router.push('/alerts')">
-            查看全部
-          </el-button>
-        </div>
-      </template>
-      <el-table :data="recentAlerts" stripe style="width: 100%">
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="title" label="告警标题" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="severity" label="等级" width="100">
-          <template #default="{ row }">
-            <el-tag :type="getSeverityTagType(row.severity)" size="small">
-              {{ row.severity }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="source" label="来源" width="120" />
-        <el-table-column prop="src_ip" label="源IP" width="140" />
-        <el-table-column prop="status" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 'open' ? 'danger' : 'info'" size="small">
-              {{ row.status }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="created_at" label="时间" width="180" />
-      </el-table>
-    </el-card>
+      <el-card shadow="hover" class="recent-card">
+        <template #header>
+          <div class="section-title">
+            <span>最近告警</span>
+            <el-button text type="primary" @click="$router.push('/alerts')">
+              查看全部
+            </el-button>
+          </div>
+        </template>
+        <el-table :data="recentAlerts" stripe class="data-table">
+          <el-table-column prop="id" label="ID" width="80" />
+          <el-table-column prop="title" label="告警标题" min-width="240" show-overflow-tooltip />
+          <el-table-column prop="severity" label="等级" width="110">
+            <template #default="{ row }">
+              <el-tag :type="getSeverityTagType(row.severity)" size="small">
+                {{ row.severity }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="source" label="来源" width="120" />
+          <el-table-column prop="src_ip" label="源IP" width="140" />
+          <el-table-column prop="status" label="状态" width="110">
+            <template #default="{ row }">
+              <el-tag :type="row.status === 'open' ? 'danger' : 'info'" size="small">
+                {{ row.status }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="created_at" label="时间" width="180" />
+        </el-table>
+      </el-card>
+    </div>
   </div>
 </template>
 
@@ -89,10 +101,10 @@ let resizeRaf = 0
 const statCards = computed(() => {
   const s = stats.value || {}
   return [
-    { label: '总告警数', value: s.total_alerts ?? 0, icon: 'Bell', color: '#409eff' },
-    { label: '高危告警', value: s.high_alerts ?? 0, icon: 'Warning', color: '#f56c6c' },
-    { label: '攻击链', value: s.chains ?? 0, icon: 'Connection', color: '#e6a23c' },
-    { label: '待审批', value: s.pending_approvals ?? 0, icon: 'Checked', color: '#67c23a' },
+    { label: '总告警数', value: s.total_alerts ?? 0, icon: 'Bell', color: '#4f8cff', description: '统一汇聚的安全事件总量' },
+    { label: '高危告警', value: s.high_alerts ?? 0, icon: 'Warning', color: '#ef4444', description: '需优先处理的高风险事件' },
+    { label: '攻击链', value: s.chains ?? 0, icon: 'Connection', color: '#f59e0b', description: '已串联的攻击活动上下文' },
+    { label: '待审批', value: s.pending_approvals ?? 0, icon: 'Checked', color: '#22c55e', description: '等待人工确认的关键动作' },
   ]
 })
 
@@ -105,17 +117,24 @@ function renderChart() {
   const { labels, counts } = buildTrendSeries(trendData.value)
 
   chartInstance.setOption({
-    tooltip: { trigger: 'axis' },
-    grid: { left: 50, right: 30, top: 30, bottom: 30 },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(9, 20, 36, 0.94)',
+      borderColor: 'rgba(96, 165, 250, 0.2)',
+      textStyle: { color: '#e2e8f0' },
+    },
+    grid: { left: 24, right: 16, top: 20, bottom: 20, containLabel: true },
     xAxis: {
       type: 'category',
       data: labels,
-      axisLabel: { color: '#8c8c8c' },
+      boundaryGap: false,
+      axisLine: { lineStyle: { color: '#dbe3ef' } },
+      axisLabel: { color: '#64748b' },
     },
     yAxis: {
       type: 'value',
-      axisLabel: { color: '#8c8c8c' },
-      splitLine: { lineStyle: { color: '#f0f0f0' } },
+      axisLabel: { color: '#64748b' },
+      splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.18)' } },
     },
     series: [
       {
@@ -123,14 +142,15 @@ function renderChart() {
         type: 'line',
         data: counts,
         smooth: true,
+        symbolSize: 8,
         areaStyle: {
           color: new graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(64,158,255,0.3)' },
-            { offset: 1, color: 'rgba(64,158,255,0.02)' },
+            { offset: 0, color: 'rgba(79, 140, 255, 0.28)' },
+            { offset: 1, color: 'rgba(79, 140, 255, 0.02)' },
           ]),
         },
-        lineStyle: { color: '#409eff', width: 2 },
-        itemStyle: { color: '#409eff' },
+        lineStyle: { color: '#2563eb', width: 3 },
+        itemStyle: { color: '#4f8cff' },
       },
     ],
   })
@@ -150,7 +170,6 @@ onMounted(async () => {
       getAlerts({ page: 1, limit: 10 }),
     ])
 
-    // Map backend response structure to frontend stats shape
     const summary = statsRes?.summary || {}
     const bySeverity = statsRes?.alertsBySeverity || []
     const highCount = bySeverity
@@ -181,3 +200,17 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize)
 })
 </script>
+
+<style scoped>
+.stats-row {
+  margin-bottom: 20px;
+}
+
+.trend-chart {
+  height: 360px;
+}
+
+.dashboard-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+</style>

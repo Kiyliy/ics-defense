@@ -1,30 +1,40 @@
 <template>
   <div>
     <div class="page-header">
-      <h2>审批队列</h2>
+      <div class="page-header-copy">
+        <h2>审批队列</h2>
+        <p class="page-subtitle">
+          对高敏感工具调用执行双重确认，确保自动化能力始终处于可控边界之内，符合防御侧审慎原则。
+        </p>
+      </div>
+      <div class="page-header-meta">
+        <span>Human-in-the-Loop</span>
+        <span>{{ approvals.length }} Items</span>
+      </div>
     </div>
 
     <el-card shadow="hover">
       <template #header>
-        <el-tabs v-model="activeTab" @tab-change="fetchApprovals">
-          <el-tab-pane label="待审批" name="pending" />
-          <el-tab-pane label="全部" name="all" />
-        </el-tabs>
+        <div class="section-title">
+          <el-tabs v-model="activeTab" @tab-change="fetchApprovals">
+            <el-tab-pane label="待审批" name="pending" />
+            <el-tab-pane label="全部" name="all" />
+          </el-tabs>
+          <small>Approval Governance</small>
+        </div>
       </template>
 
-      <el-table :data="approvals" v-loading="loading" stripe style="width: 100%">
+      <el-table :data="approvals" v-loading="loading" stripe class="data-table">
         <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="trace_id" label="Trace ID" width="200" show-overflow-tooltip />
+        <el-table-column prop="trace_id" label="Trace ID" width="220" show-overflow-tooltip />
         <el-table-column prop="tool_name" label="工具名称" width="180" />
-        <el-table-column prop="tool_args" label="工具参数" min-width="250">
+        <el-table-column prop="tool_args" label="工具参数" min-width="280">
           <template #default="{ row }">
-            <el-popover placement="top-start" :width="400" trigger="hover">
+            <el-popover placement="top-start" :width="420" trigger="hover">
               <template #reference>
-                <span style="cursor: pointer; color: #409eff">
-                  {{ truncateArgs(row.tool_args) }}
-                </span>
+                <span class="link-text">{{ truncateArgs(row.tool_args) }}</span>
               </template>
-              <pre style="white-space: pre-wrap; font-size: 12px; max-height: 300px; overflow: auto">{{ formatArgs(row.tool_args) }}</pre>
+              <pre class="detail-pre">{{ formatArgs(row.tool_args) }}</pre>
             </el-popover>
           </template>
         </el-table-column>
@@ -49,14 +59,13 @@
                 拒绝
               </el-button>
             </template>
-            <span v-else style="color: #909399; font-size: 12px">已处理</span>
+            <span v-else class="muted-text">已处理</span>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
 
-    <!-- 拒绝原因弹窗 -->
-    <el-dialog v-model="rejectDialogVisible" title="拒绝原因" width="450px">
+    <el-dialog v-model="rejectDialogVisible" title="拒绝原因" width="460px">
       <el-form>
         <el-form-item label="原因">
           <el-input
@@ -69,7 +78,7 @@
       </el-form>
       <template #footer>
         <el-button @click="rejectDialogVisible = false">取消</el-button>
-        <el-button type="danger" @click="confirmReject" :disabled="!rejectReason.trim()">
+        <el-button type="danger" :disabled="!rejectReason.trim()" @click="confirmReject">
           确认拒绝
         </el-button>
       </template>
@@ -159,3 +168,17 @@ onMounted(() => {
   fetchApprovals()
 })
 </script>
+
+<style scoped>
+.link-text {
+  cursor: pointer;
+  color: #2563eb;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.muted-text {
+  color: #94a3b8;
+  font-size: 0.8rem;
+}
+</style>
