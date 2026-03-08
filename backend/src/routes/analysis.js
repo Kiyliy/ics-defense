@@ -85,10 +85,10 @@ async function analyzeWithLLM(db, alerts, alertIds, { analyzeAlertsFn = analyzeA
     rationale: result.rationale || '',
   });
 
-  // 更新告警状态为 analyzing
+  // fallback 为同步分析，完成后直接进入完成态
   const updateStatus = db.prepare('UPDATE alerts SET status = ? WHERE id = ?');
   for (const id of alertIds) {
-    updateStatus.run('analyzing', id);
+    updateStatus.run('resolved', id);
   }
 
   return {
@@ -234,7 +234,10 @@ export function createAnalysisRouter({
       return res.status(400).json({ error: 'status must be accepted or rejected' });
     }
     const result = req.db.prepare('UPDATE decisions SET status = ? WHERE id = ?').run(status, req.params.id);
-    res.json({ updated: result.changes > 0 });
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Decision not found' });
+    }
+    res.json({ updated: true });
   });
 
   return router;

@@ -126,6 +126,28 @@ test('audit stats aggregate token usage formats and ignore malformed rows', asyn
   });
 });
 
+test('audit list honors days filter and validates invalid days', async () => {
+  await withTestServer(async ({ db, baseUrl }) => {
+    const insert = db.prepare(`
+      INSERT INTO audit_logs (trace_id, alert_id, event_type, created_at)
+      VALUES (?, ?, ?, ?)
+    `);
+    insert.run('trace-old', '1', 'plan', '2026-02-01T08:00:00.000Z');
+    insert.run('trace-new', '2', 'execute', new Date().toISOString());
+
+    const ok = await fetch(`${baseUrl}/api/audit?days=7`);
+    const body = await ok.json();
+    assert.equal(ok.status, 200);
+    assert.equal(body.total, 1);
+    assert.equal(body.logs.length, 1);
+    assert.equal(body.logs[0].trace_id, 'trace-new');
+
+    const bad = await fetch(`${baseUrl}/api/audit?days=-1`);
+    assert.equal(bad.status, 400);
+    assert.deepEqual(await bad.json(), { error: 'days must be a non-negative number' });
+  });
+});
+
 test('audit trace returns ordered logs and summarized token totals', async () => {
   await withTestServer(async ({ db, baseUrl }) => {
     const insert = db.prepare(`

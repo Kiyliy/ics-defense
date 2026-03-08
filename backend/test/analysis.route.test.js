@@ -102,6 +102,34 @@ test('analysis alerts delegates to agent service and updates alert statuses', as
   });
 });
 
+test('analysis alerts fallback resolves alerts when agent service is unavailable', async () => {
+  await withTestServer(async ({ db, baseUrl, fetchJson }) => {
+    const insert = db.prepare(`
+      INSERT INTO alerts (source, severity, title, status)
+      VALUES (?, ?, ?, ?)
+    `);
+    insert.run('waf', 'high', 'SQL Injection', 'open');
+
+    const response = await fetchJson(`${baseUrl}/api/analysis/alerts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ alert_ids: [1] }),
+    });
+    assert.equal(response.status, 200);
+
+    const body = await response.json();
+    assert.equal(body.attack_chain_id, 1);
+    assert.equal(body.analysis.risk_level, 'high');
+
+    const alert = db.prepare('SELECT status FROM alerts WHERE id = 1').get();
+    assert.equal(alert.status, 'resolved');
+  }, {
+    externalFetch: async () => {
+      throw new Error('agent down');
+    },
+  });
+});
+
 test('analysis chat endpoint validates messages payload', async () => {
   await withTestServer(async ({ baseUrl, fetchJson }) => {
     const response = await fetchJson(`${baseUrl}/api/analysis/chat`, {
@@ -150,6 +178,14 @@ test('analysis chains endpoint joins decisions and decisions patch validates sta
     });
     assert.equal(validPatch.status, 200);
     assert.deepEqual(await validPatch.json(), { updated: true });
+
+    const missingPatch = await fetchJson(`${baseUrl}/api/analysis/decisions/99999`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'accepted' }),
+    });
+    assert.equal(missingPatch.status, 404);
+    assert.deepEqual(await missingPatch.json(), { error: 'Decision not found' });
 
     const decision = db.prepare('SELECT status FROM decisions WHERE id = ?').get(decisionId);
     assert.equal(decision.status, 'accepted');

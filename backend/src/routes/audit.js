@@ -24,12 +24,44 @@ function parseTokenUsage(raw) {
 }
 
 /**
+ * @param {unknown} rawDays
+ * @returns {{ ok: true, days: number } | { ok: false, error: string }}
+ */
+function parseDays(rawDays) {
+  if (rawDays === undefined || rawDays === null || rawDays === '') {
+    return { ok: true, days: 7 };
+  }
+
+  const days = Number(rawDays);
+  if (!Number.isFinite(days) || days < 0) {
+    return { ok: false, error: 'days must be a non-negative number' };
+  }
+
+  return { ok: true, days };
+}
+
+/**
+ * @param {number} days
+ * @returns {string}
+ */
+function buildSinceIso(days) {
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  return since.toISOString();
+}
+
+/**
  * GET /api/audit
- * 查询审计日志，支持 trace_id / alert_id 过滤和分页
+ * 查询审计日志，支持 trace_id / alert_id / days 过滤和分页
  */
 router.get('/', (/** @type {any} */ req, /** @type {any} */ res) => {
-  const { trace_id, alert_id, limit = 50, offset = 0 } = req.query;
+  const { trace_id, alert_id, days, limit = 50, offset = 0 } = req.query;
   const db = req.db;
+
+  const parsedDays = parseDays(days);
+  if (!parsedDays.ok) {
+    return res.status(400).json({ error: parsedDays.error });
+  }
 
   /** @type {string[]} */
   const where = [];
@@ -37,6 +69,8 @@ router.get('/', (/** @type {any} */ req, /** @type {any} */ res) => {
   const params = {};
   if (trace_id) { where.push('trace_id = @trace_id'); params.trace_id = String(trace_id); }
   if (alert_id) { where.push('alert_id = @alert_id'); params.alert_id = String(alert_id); }
+  where.push('created_at >= @since');
+  params.since = buildSinceIso(parsedDays.days);
 
   const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
   params.limit = Number(limit);
@@ -59,13 +93,14 @@ router.get('/', (/** @type {any} */ req, /** @type {any} */ res) => {
  * Token 用量统计，支持 ?days=7
  */
 router.get('/stats', (/** @type {any} */ req, /** @type {any} */ res) => {
-  const { days = 7 } = req.query;
+  const { days } = req.query;
   const db = req.db;
-  const daysNum = Number(days);
+  const parsedDays = parseDays(days);
+  if (!parsedDays.ok) {
+    return res.status(400).json({ error: parsedDays.error });
+  }
 
-  const since = new Date();
-  since.setDate(since.getDate() - daysNum);
-  const sinceStr = since.toISOString();
+  const sinceStr = buildSinceIso(parsedDays.days);
 
   const totalAnalyses = db.prepare(
     `SELECT COUNT(DISTINCT trace_id) as count FROM audit_logs WHERE created_at >= ?`
