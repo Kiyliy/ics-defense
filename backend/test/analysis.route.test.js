@@ -1,5 +1,4 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
+import { describe, it, expect } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -40,141 +39,143 @@ function seedAlerts(db) {
   insert.run('nids', 'critical', 'Port Scan', 'scan', 'open', '2026-03-08T10:05:00.000Z');
 }
 
-test('analysis alerts validates payload and missing alerts', async () => {
-  await withTestServer(async ({ baseUrl }) => {
-    const bad = await fetch(`${baseUrl}/api/analysis/alerts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ alert_ids: [] }),
-    });
-    assert.equal(bad.status, 400);
-    assert.deepEqual(await bad.json(), { error: 'alert_ids[] required' });
+describe('analysis routes', () => {
+  it('analysis alerts validates payload and missing alerts', async () => {
+    await withTestServer(async ({ baseUrl }) => {
+      const bad = await fetch(`${baseUrl}/api/analysis/alerts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alert_ids: [] }),
+      });
+      expect(bad.status).toBe(400);
+      expect(await bad.json()).toEqual({ error: 'alert_ids[] required' });
 
-    const badIds = await fetch(`${baseUrl}/api/analysis/alerts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ alert_ids: [0, 2] }),
-    });
-    assert.equal(badIds.status, 400);
-    assert.deepEqual(await badIds.json(), { error: 'alert_ids must contain positive integers' });
+      const badIds = await fetch(`${baseUrl}/api/analysis/alerts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alert_ids: [0, 2] }),
+      });
+      expect(badIds.status).toBe(400);
+      expect(await badIds.json()).toEqual({ error: 'alert_ids must contain positive integers' });
 
-    const missing = await fetch(`${baseUrl}/api/analysis/alerts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ alert_ids: [999] }),
-    });
-    assert.equal(missing.status, 404);
-    assert.deepEqual(await missing.json(), { error: 'No alerts found' });
-  });
-});
-
-test('analysis alerts rejects partial missing ids', async () => {
-  await withTestServer(async ({ db, baseUrl }) => {
-    seedAlerts(db);
-    const response = await fetch(`${baseUrl}/api/analysis/alerts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ alert_ids: [1, 999] }),
-    });
-
-    assert.equal(response.status, 404);
-    assert.deepEqual(await response.json(), {
-      error: 'Some alerts were not found',
-      missing_alert_ids: [999],
+      const missing = await fetch(`${baseUrl}/api/analysis/alerts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alert_ids: [999] }),
+      });
+      expect(missing.status).toBe(404);
+      expect(await missing.json()).toEqual({ error: 'No alerts found' });
     });
   });
-});
 
-test('analysis alerts delegates to agent service and updates alert statuses', async () => {
-  const mockFetch = async (url, options) => {
-    assert.match(String(url), /\/analyze$/);
-    assert.equal(options.method, 'POST');
-    assert.deepEqual(JSON.parse(options.body), { alert_ids: [1, 2] });
-    return {
-      ok: true,
-      async json() {
-        return { trace_id: 'trace-123' };
-      },
+  it('analysis alerts rejects partial missing ids', async () => {
+    await withTestServer(async ({ db, baseUrl }) => {
+      seedAlerts(db);
+      const response = await fetch(`${baseUrl}/api/analysis/alerts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alert_ids: [1, 999] }),
+      });
+
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({
+        error: 'Some alerts were not found',
+        missing_alert_ids: [999],
+      });
+    });
+  });
+
+  it('analysis alerts delegates to agent service and updates alert statuses', async () => {
+    const mockFetch = async (url, options) => {
+      expect(String(url)).toMatch(/\/analyze$/);
+      expect(options.method).toBe('POST');
+      expect(JSON.parse(options.body)).toEqual({ alert_ids: [1, 2] });
+      return {
+        ok: true,
+        async json() {
+          return { trace_id: 'trace-123' };
+        },
+      };
     };
-  };
 
-  await withTestServer(async ({ db, baseUrl }) => {
-    seedAlerts(db);
-    const response = await fetch(`${baseUrl}/api/analysis/alerts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ alert_ids: [1, 2] }),
-    });
-    assert.equal(response.status, 200);
+    await withTestServer(async ({ db, baseUrl }) => {
+      seedAlerts(db);
+      const response = await fetch(`${baseUrl}/api/analysis/alerts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alert_ids: [1, 2] }),
+      });
+      expect(response.status).toBe(200);
 
-    const body = await response.json();
-    assert.equal(body.status, 'analyzing');
-    assert.equal(body.message, 'Analysis delegated to Agent Service');
-    assert.equal(body.trace_id, 'trace-123');
+      const body = await response.json();
+      expect(body.status).toBe('analyzing');
+      expect(body.message).toBe('Analysis delegated to Agent Service');
+      expect(body.trace_id).toBe('trace-123');
 
-    const statuses = db.prepare('SELECT id, status FROM alerts ORDER BY id ASC').all();
-    assert.deepEqual(statuses, [
-      { id: 1, status: 'analyzing' },
-      { id: 2, status: 'analyzing' },
-    ]);
-  }, createAnalysisRouter({ fetchFn: mockFetch }));
-});
-
-test('analysis chat endpoint validates messages payload', async () => {
-  await withTestServer(async ({ baseUrl }) => {
-    const response = await fetch(`${baseUrl}/api/analysis/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: null }),
-    });
-
-    assert.equal(response.status, 400);
-    assert.deepEqual(await response.json(), { error: 'messages[] required' });
+      const statuses = db.prepare('SELECT id, status FROM alerts ORDER BY id ASC').all();
+      expect(statuses).toEqual([
+        { id: 1, status: 'analyzing' },
+        { id: 2, status: 'analyzing' },
+      ]);
+    }, createAnalysisRouter({ fetchFn: mockFetch }));
   });
-});
 
-test('analysis chains endpoint joins decisions and exposes nested data', async () => {
-  await withTestServer(async ({ db, baseUrl }) => {
-    db.prepare(`
-      INSERT INTO alerts (id, source, severity, title, src_ip, status)
-      VALUES (1, 'waf', 'high', 'SQL Injection', '10.0.0.1', 'resolved')
-    `).run();
+  it('analysis chat endpoint validates messages payload', async () => {
+    await withTestServer(async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/api/analysis/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: null }),
+      });
 
-    const chainId = Number(db.prepare(`
-      INSERT INTO attack_chains (name, stage, confidence, alert_ids, evidence)
-      VALUES ('Chain-1', 'Execution', 0.81, '[1]', 'evidence')
-    `).run().lastInsertRowid);
-
-    db.prepare(`
-      INSERT INTO decisions (attack_chain_id, risk_level, recommendation, action_type, rationale, status, created_at)
-      VALUES (?, 'high', 'block now', 'block', 'because', 'pending', '2026-03-08T10:00:00.000Z')
-    `).run(chainId);
-    db.prepare(`
-      INSERT INTO decisions (attack_chain_id, risk_level, recommendation, action_type, rationale, status, created_at)
-      VALUES (?, 'medium', 'older rec', 'monitor', 'older', 'accepted', '2026-03-08T09:00:00.000Z')
-    `).run(chainId);
-
-    const chainsResp = await fetch(`${baseUrl}/api/analysis/chains`);
-    const chains = await chainsResp.json();
-    assert.equal(chainsResp.status, 200);
-    assert.equal(chains.chains.length, 1);
-    assert.equal(chains.chains[0].alerts.length, 1);
-    assert.equal(chains.chains[0].alert_count, 1);
-    assert.equal(chains.chains[0].decisions.length, 2);
-    assert.equal(chains.chains[0].decisions[0].action, 'block now');
-    assert.equal(chains.chains[0].recommendation, 'block now');
-    assert.equal(chains.chains[0].decision_status, 'pending');
-  });
-});
-
-test('analysis decision patch returns 404 when decision is missing', async () => {
-  await withTestServer(async ({ baseUrl }) => {
-    const missingPatch = await fetch(`${baseUrl}/api/analysis/decisions/999`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'accepted' }),
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: 'messages[] required' });
     });
-    assert.equal(missingPatch.status, 404);
-    assert.deepEqual(await missingPatch.json(), { error: 'Decision not found' });
+  });
+
+  it('analysis chains endpoint joins decisions and exposes nested data', async () => {
+    await withTestServer(async ({ db, baseUrl }) => {
+      db.prepare(`
+        INSERT INTO alerts (id, source, severity, title, src_ip, status)
+        VALUES (1, 'waf', 'high', 'SQL Injection', '10.0.0.1', 'resolved')
+      `).run();
+
+      const chainId = Number(db.prepare(`
+        INSERT INTO attack_chains (name, stage, confidence, alert_ids, evidence)
+        VALUES ('Chain-1', 'Execution', 0.81, '[1]', 'evidence')
+      `).run().lastInsertRowid);
+
+      db.prepare(`
+        INSERT INTO decisions (attack_chain_id, risk_level, recommendation, action_type, rationale, status, created_at)
+        VALUES (?, 'high', 'block now', 'block', 'because', 'pending', '2026-03-08T10:00:00.000Z')
+      `).run(chainId);
+      db.prepare(`
+        INSERT INTO decisions (attack_chain_id, risk_level, recommendation, action_type, rationale, status, created_at)
+        VALUES (?, 'medium', 'older rec', 'monitor', 'older', 'accepted', '2026-03-08T09:00:00.000Z')
+      `).run(chainId);
+
+      const chainsResp = await fetch(`${baseUrl}/api/analysis/chains`);
+      const chains = await chainsResp.json();
+      expect(chainsResp.status).toBe(200);
+      expect(chains.chains.length).toBe(1);
+      expect(chains.chains[0].alerts.length).toBe(1);
+      expect(chains.chains[0].alert_count).toBe(1);
+      expect(chains.chains[0].decisions.length).toBe(2);
+      expect(chains.chains[0].decisions[0].action).toBe('block now');
+      expect(chains.chains[0].recommendation).toBe('block now');
+      expect(chains.chains[0].decision_status).toBe('pending');
+    });
+  });
+
+  it('analysis decision patch returns 404 when decision is missing', async () => {
+    await withTestServer(async ({ baseUrl }) => {
+      const missingPatch = await fetch(`${baseUrl}/api/analysis/decisions/999`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'accepted' }),
+      });
+      expect(missingPatch.status).toBe(404);
+      expect(await missingPatch.json()).toEqual({ error: 'Decision not found' });
+    });
   });
 });

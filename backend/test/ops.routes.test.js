@@ -1,5 +1,4 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
+import { describe, it, expect } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -36,187 +35,189 @@ async function withTestServer(run) {
   }
 }
 
-test('approval routes filter pending items and persist one-time decisions', async () => {
-  await withTestServer(async ({ db, baseUrl }) => {
-    const insert = db.prepare(`
-      INSERT INTO approval_queue (trace_id, tool_name, tool_args, reason, status)
-      VALUES (?, ?, ?, ?, ?)
-    `);
-    insert.run('trace-1', 'block_ip', '{"ip":"10.0.0.8"}', 'block attacker', 'pending');
-    insert.run('trace-2', 'send_email', '{"target":"soc"}', 'notify team', 'approved');
+describe('ops routes', () => {
+  it('approval routes filter pending items and persist one-time decisions', async () => {
+    await withTestServer(async ({ db, baseUrl }) => {
+      const insert = db.prepare(`
+        INSERT INTO approval_queue (trace_id, tool_name, tool_args, reason, status)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+      insert.run('trace-1', 'block_ip', '{"ip":"10.0.0.8"}', 'block attacker', 'pending');
+      insert.run('trace-2', 'send_email', '{"target":"soc"}', 'notify team', 'approved');
 
-    const listResponse = await fetch(`${baseUrl}/api/approval?status=pending`);
-    const listBody = await listResponse.json();
+      const listResponse = await fetch(`${baseUrl}/api/approval?status=pending`);
+      const listBody = await listResponse.json();
 
-    assert.equal(listResponse.status, 200);
-    assert.equal(listBody.total, 1);
-    assert.equal(listBody.approvals[0].trace_id, 'trace-1');
+      expect(listResponse.status).toBe(200);
+      expect(listBody.total).toBe(1);
+      expect(listBody.approvals[0].trace_id).toBe('trace-1');
 
-    const approvalId = listBody.approvals[0].id;
-    const patchResponse = await fetch(`${baseUrl}/api/approval/${approvalId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'rejected', reason: 'needs analyst review' }),
-    });
-    const updated = await patchResponse.json();
+      const approvalId = listBody.approvals[0].id;
+      const patchResponse = await fetch(`${baseUrl}/api/approval/${approvalId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'rejected', reason: 'needs analyst review' }),
+      });
+      const updated = await patchResponse.json();
 
-    assert.equal(patchResponse.status, 200);
-    assert.equal(updated.status, 'rejected');
-    assert.equal(updated.reason, 'needs analyst review');
-    assert.ok(updated.responded_at);
+      expect(patchResponse.status).toBe(200);
+      expect(updated.status).toBe('rejected');
+      expect(updated.reason).toBe('needs analyst review');
+      expect(updated.responded_at).toBeTruthy();
 
-    const secondPatch = await fetch(`${baseUrl}/api/approval/${approvalId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'approved' }),
-    });
+      const secondPatch = await fetch(`${baseUrl}/api/approval/${approvalId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'approved' }),
+      });
 
-    assert.equal(secondPatch.status, 400);
-    assert.deepEqual(await secondPatch.json(), {
-      error: 'Only pending approvals can be updated',
+      expect(secondPatch.status).toBe(400);
+      expect(await secondPatch.json()).toEqual({
+        error: 'Only pending approvals can be updated',
+      });
     });
   });
-});
 
-test('approval detail returns 404 for missing items and rejects invalid statuses', async () => {
-  await withTestServer(async ({ db, baseUrl }) => {
-    const inserted = db.prepare(`
-      INSERT INTO approval_queue (trace_id, tool_name, status)
-      VALUES ('trace-3', 'block_ip', 'pending')
-    `).run();
-    const id = Number(inserted.lastInsertRowid);
+  it('approval detail returns 404 for missing items and rejects invalid statuses', async () => {
+    await withTestServer(async ({ db, baseUrl }) => {
+      const inserted = db.prepare(`
+        INSERT INTO approval_queue (trace_id, tool_name, status)
+        VALUES ('trace-3', 'block_ip', 'pending')
+      `).run();
+      const id = Number(inserted.lastInsertRowid);
 
-    const invalid = await fetch(`${baseUrl}/api/approval/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'ignored' }),
+      const invalid = await fetch(`${baseUrl}/api/approval/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'ignored' }),
+      });
+      expect(invalid.status).toBe(400);
+
+      const missing = await fetch(`${baseUrl}/api/approval/99999`);
+      expect(missing.status).toBe(404);
+      expect(await missing.json()).toEqual({ error: 'Approval not found' });
     });
-    assert.equal(invalid.status, 400);
-
-    const missing = await fetch(`${baseUrl}/api/approval/99999`);
-    assert.equal(missing.status, 404);
-    assert.deepEqual(await missing.json(), { error: 'Approval not found' });
   });
-});
 
-test('audit stats aggregate token usage formats and ignore malformed rows', async () => {
-  await withTestServer(async ({ db, baseUrl }) => {
-    const insert = db.prepare(`
-      INSERT INTO audit_logs (trace_id, alert_id, event_type, token_usage, created_at)
-      VALUES (?, ?, ?, ?, ?)
-    `);
-    insert.run('trace-a', '1', 'plan', JSON.stringify({ input_tokens: 10, output_tokens: 5 }), '2026-03-07T10:00:00.000Z');
-    insert.run('trace-a', '1', 'execute', JSON.stringify({ prompt_tokens: 3, completion_tokens: 7 }), '2026-03-07T10:05:00.000Z');
-    insert.run('trace-b', '2', 'plan', '{bad-json', '2026-03-08T09:00:00.000Z');
-    insert.run('trace-b', '2', 'execute', null, '2026-03-08T09:05:00.000Z');
+  it('audit stats aggregate token usage formats and ignore malformed rows', async () => {
+    await withTestServer(async ({ db, baseUrl }) => {
+      const insert = db.prepare(`
+        INSERT INTO audit_logs (trace_id, alert_id, event_type, token_usage, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+      insert.run('trace-a', '1', 'plan', JSON.stringify({ input_tokens: 10, output_tokens: 5 }), '2026-03-07T10:00:00.000Z');
+      insert.run('trace-a', '1', 'execute', JSON.stringify({ prompt_tokens: 3, completion_tokens: 7 }), '2026-03-07T10:05:00.000Z');
+      insert.run('trace-b', '2', 'plan', '{bad-json', '2026-03-08T09:00:00.000Z');
+      insert.run('trace-b', '2', 'execute', null, '2026-03-08T09:05:00.000Z');
 
-    const response = await fetch(`${baseUrl}/api/audit/stats?days=30`);
-    const body = await response.json();
+      const response = await fetch(`${baseUrl}/api/audit/stats?days=30`);
+      const body = await response.json();
 
-    assert.equal(response.status, 200);
-    assert.equal(body.total_analyses, 2);
-    assert.equal(body.total_input_tokens, 13);
-    assert.equal(body.total_output_tokens, 12);
-    assert.equal(body.daily.length, 2);
+      expect(response.status).toBe(200);
+      expect(body.total_analyses).toBe(2);
+      expect(body.total_input_tokens).toBe(13);
+      expect(body.total_output_tokens).toBe(12);
+      expect(body.daily.length).toBe(2);
 
-    const day1 = body.daily.find((row) => row.date === '2026-03-07');
-    const day2 = body.daily.find((row) => row.date === '2026-03-08');
-    assert.deepEqual(day1, { date: '2026-03-07', analyses: 1, tokens: 25 });
-    assert.deepEqual(day2, { date: '2026-03-08', analyses: 1, tokens: 0 });
-  });
-});
-
-test('audit list honors days filter and validates invalid days', async () => {
-  await withTestServer(async ({ db, baseUrl }) => {
-    const insert = db.prepare(`
-      INSERT INTO audit_logs (trace_id, alert_id, event_type, created_at)
-      VALUES (?, ?, ?, ?)
-    `);
-    insert.run('trace-old', '1', 'plan', '2026-02-01T08:00:00.000Z');
-    insert.run('trace-new', '2', 'execute', new Date().toISOString());
-
-    const ok = await fetch(`${baseUrl}/api/audit?days=7`);
-    const body = await ok.json();
-    assert.equal(ok.status, 200);
-    assert.equal(body.total, 1);
-    assert.equal(body.logs.length, 1);
-    assert.equal(body.logs[0].trace_id, 'trace-new');
-
-    const bad = await fetch(`${baseUrl}/api/audit?days=-1`);
-    assert.equal(bad.status, 400);
-    assert.deepEqual(await bad.json(), { error: 'days must be a positive integer' });
-  });
-});
-
-test('audit trace returns ordered logs and summarized token totals', async () => {
-  await withTestServer(async ({ db, baseUrl }) => {
-    const insert = db.prepare(`
-      INSERT INTO audit_logs (trace_id, alert_id, event_type, token_usage, created_at)
-      VALUES (?, ?, ?, ?, ?)
-    `);
-    insert.run('trace-z', '7', 'plan', JSON.stringify({ input_tokens: 4, output_tokens: 6 }), '2026-03-08T08:00:00.000Z');
-    insert.run('trace-z', '7', 'execute', JSON.stringify({ prompt_tokens: 2, completion_tokens: 3 }), '2026-03-08T08:01:00.000Z');
-
-    const ok = await fetch(`${baseUrl}/api/audit/trace/trace-z`);
-    const body = await ok.json();
-    assert.equal(ok.status, 200);
-    assert.equal(body.trace_id, 'trace-z');
-    assert.equal(body.logs.length, 2);
-    assert.equal(body.summary.total_steps, 2);
-    assert.equal(body.summary.total_tokens, 15);
-    assert.equal(body.logs[0].event_type, 'plan');
-    assert.equal(body.logs[1].event_type, 'execute');
-
-    const missing = await fetch(`${baseUrl}/api/audit/trace/does-not-exist`);
-    assert.equal(missing.status, 404);
-    assert.deepEqual(await missing.json(), { error: 'Trace not found' });
-  });
-});
-
-test('dashboard stats and assets aggregate alerts, decisions, and asset impact', async () => {
-  await withTestServer(async ({ db, baseUrl }) => {
-    db.prepare(`INSERT INTO assets (ip, hostname, type, importance) VALUES ('192.168.0.10', 'HMI-1', 'server', 5)`).run();
-    db.prepare(`INSERT INTO assets (ip, hostname, type, importance) VALUES ('192.168.0.20', 'PLC-1', 'host', 4)`).run();
-
-    const insertAlert = db.prepare(`
-      INSERT INTO alerts (source, severity, title, status, dst_ip, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
-    insertAlert.run('waf', 'high', 'SQL Injection', 'open', '192.168.0.10', '2026-03-08T11:00:00.000Z');
-    insertAlert.run('nids', 'critical', 'RCE Attempt', 'analyzing', '192.168.0.10', '2026-03-08T11:05:00.000Z');
-    insertAlert.run('hids', 'low', 'Config Drift', 'resolved', '192.168.0.20', '2026-03-08T11:10:00.000Z');
-
-    const chainId = Number(db.prepare(`
-      INSERT INTO attack_chains (name, stage, confidence, alert_ids, evidence, created_at)
-      VALUES ('Chain A', 'Execution', 0.92, '[1,2]', 'matched evidence', '2026-03-08T11:15:00.000Z')
-    `).run().lastInsertRowid);
-
-    db.prepare(`
-      INSERT INTO decisions (attack_chain_id, risk_level, recommendation, action_type, status)
-      VALUES (?, 'high', 'block ip', 'block', 'pending')
-    `).run(chainId);
-
-    const statsResp = await fetch(`${baseUrl}/api/dashboard/stats`);
-    const stats = await statsResp.json();
-    assert.equal(statsResp.status, 200);
-    assert.deepEqual(stats.summary, {
-      totalAlerts: 3,
-      totalChains: 1,
-      pendingDecisions: 1,
+      const day1 = body.daily.find((row) => row.date === '2026-03-07');
+      const day2 = body.daily.find((row) => row.date === '2026-03-08');
+      expect(day1).toEqual({ date: '2026-03-07', analyses: 1, tokens: 25 });
+      expect(day2).toEqual({ date: '2026-03-08', analyses: 1, tokens: 0 });
     });
-    assert.equal(stats.alertsByStatus.length, 3);
-    assert.equal(stats.alertsBySeverity.length, 3);
-    assert.equal(stats.alertsBySource.length, 3);
-    assert.equal(stats.recentAlerts.length, 3);
-    assert.equal(stats.activeChains.length, 1);
-    assert.equal(stats.activeChains[0].decision_status, 'pending');
+  });
 
-    const assetsResp = await fetch(`${baseUrl}/api/dashboard/assets`);
-    const assets = await assetsResp.json();
-    assert.equal(assetsResp.status, 200);
-    assert.equal(assets.assets.length, 2);
-    assert.equal(assets.assets[0].ip, '192.168.0.10');
-    assert.equal(assets.assets[0].alert_count, 2);
-    assert.equal(assets.assets[1].alert_count, 1);
+  it('audit list honors days filter and validates invalid days', async () => {
+    await withTestServer(async ({ db, baseUrl }) => {
+      const insert = db.prepare(`
+        INSERT INTO audit_logs (trace_id, alert_id, event_type, created_at)
+        VALUES (?, ?, ?, ?)
+      `);
+      insert.run('trace-old', '1', 'plan', '2026-02-01T08:00:00.000Z');
+      insert.run('trace-new', '2', 'execute', new Date().toISOString());
+
+      const ok = await fetch(`${baseUrl}/api/audit?days=7`);
+      const body = await ok.json();
+      expect(ok.status).toBe(200);
+      expect(body.total).toBe(1);
+      expect(body.logs.length).toBe(1);
+      expect(body.logs[0].trace_id).toBe('trace-new');
+
+      const bad = await fetch(`${baseUrl}/api/audit?days=-1`);
+      expect(bad.status).toBe(400);
+      expect(await bad.json()).toEqual({ error: 'days must be a positive integer' });
+    });
+  });
+
+  it('audit trace returns ordered logs and summarized token totals', async () => {
+    await withTestServer(async ({ db, baseUrl }) => {
+      const insert = db.prepare(`
+        INSERT INTO audit_logs (trace_id, alert_id, event_type, token_usage, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+      insert.run('trace-z', '7', 'plan', JSON.stringify({ input_tokens: 4, output_tokens: 6 }), '2026-03-08T08:00:00.000Z');
+      insert.run('trace-z', '7', 'execute', JSON.stringify({ prompt_tokens: 2, completion_tokens: 3 }), '2026-03-08T08:01:00.000Z');
+
+      const ok = await fetch(`${baseUrl}/api/audit/trace/trace-z`);
+      const body = await ok.json();
+      expect(ok.status).toBe(200);
+      expect(body.trace_id).toBe('trace-z');
+      expect(body.logs.length).toBe(2);
+      expect(body.summary.total_steps).toBe(2);
+      expect(body.summary.total_tokens).toBe(15);
+      expect(body.logs[0].event_type).toBe('plan');
+      expect(body.logs[1].event_type).toBe('execute');
+
+      const missing = await fetch(`${baseUrl}/api/audit/trace/does-not-exist`);
+      expect(missing.status).toBe(404);
+      expect(await missing.json()).toEqual({ error: 'Trace not found' });
+    });
+  });
+
+  it('dashboard stats and assets aggregate alerts, decisions, and asset impact', async () => {
+    await withTestServer(async ({ db, baseUrl }) => {
+      db.prepare(`INSERT INTO assets (ip, hostname, type, importance) VALUES ('192.168.0.10', 'HMI-1', 'server', 5)`).run();
+      db.prepare(`INSERT INTO assets (ip, hostname, type, importance) VALUES ('192.168.0.20', 'PLC-1', 'host', 4)`).run();
+
+      const insertAlert = db.prepare(`
+        INSERT INTO alerts (source, severity, title, status, dst_ip, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `);
+      insertAlert.run('waf', 'high', 'SQL Injection', 'open', '192.168.0.10', '2026-03-08T11:00:00.000Z');
+      insertAlert.run('nids', 'critical', 'RCE Attempt', 'analyzing', '192.168.0.10', '2026-03-08T11:05:00.000Z');
+      insertAlert.run('hids', 'low', 'Config Drift', 'resolved', '192.168.0.20', '2026-03-08T11:10:00.000Z');
+
+      const chainId = Number(db.prepare(`
+        INSERT INTO attack_chains (name, stage, confidence, alert_ids, evidence, created_at)
+        VALUES ('Chain A', 'Execution', 0.92, '[1,2]', 'matched evidence', '2026-03-08T11:15:00.000Z')
+      `).run().lastInsertRowid);
+
+      db.prepare(`
+        INSERT INTO decisions (attack_chain_id, risk_level, recommendation, action_type, status)
+        VALUES (?, 'high', 'block ip', 'block', 'pending')
+      `).run(chainId);
+
+      const statsResp = await fetch(`${baseUrl}/api/dashboard/stats`);
+      const stats = await statsResp.json();
+      expect(statsResp.status).toBe(200);
+      expect(stats.summary).toEqual({
+        totalAlerts: 3,
+        totalChains: 1,
+        pendingDecisions: 1,
+      });
+      expect(stats.alertsByStatus.length).toBe(3);
+      expect(stats.alertsBySeverity.length).toBe(3);
+      expect(stats.alertsBySource.length).toBe(3);
+      expect(stats.recentAlerts.length).toBe(3);
+      expect(stats.activeChains.length).toBe(1);
+      expect(stats.activeChains[0].decision_status).toBe('pending');
+
+      const assetsResp = await fetch(`${baseUrl}/api/dashboard/assets`);
+      const assets = await assetsResp.json();
+      expect(assetsResp.status).toBe(200);
+      expect(assets.assets.length).toBe(2);
+      expect(assets.assets[0].ip).toBe('192.168.0.10');
+      expect(assets.assets[0].alert_count).toBe(2);
+      expect(assets.assets[1].alert_count).toBe(1);
+    });
   });
 });

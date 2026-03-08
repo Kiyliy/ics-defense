@@ -1,32 +1,33 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
+import { describe, it, expect } from 'vitest';
 import { createNotificationService } from '../src/services/notifications/service.js';
 import { NotificationError } from '../src/services/notifications/errors.js';
 import { computeRetryDelayMs, shouldRetryNotification } from '../src/workers/notification-worker.js';
 
-test('notification service validates unsupported provider', () => {
-  const service = createNotificationService({ env: { NOTIFICATION_PROVIDER: 'noop' } });
-  assert.throws(() => service.validatePayload({ provider: 'unknown', text: 'hi' }), NotificationError);
-});
+describe('notification services', () => {
+  it('notification service validates unsupported provider', () => {
+    const service = createNotificationService({ env: { NOTIFICATION_PROVIDER: 'noop' } });
+    expect(() => service.validatePayload({ provider: 'unknown', text: 'hi' })).toThrow(NotificationError);
+  });
 
-test('notification service validates configured webhook provider', () => {
-  const service = createNotificationService({ env: { NOTIFICATION_PROVIDER: 'feishu', FEISHU_BOT_WEBHOOK_URL: 'https://example.com/hook' } });
-  assert.doesNotThrow(() => service.validatePayload({ provider: 'feishu', text: 'hi' }));
-});
+  it('notification service validates configured webhook provider', () => {
+    const service = createNotificationService({ env: { NOTIFICATION_PROVIDER: 'feishu', FEISHU_BOT_WEBHOOK_URL: 'https://example.com/hook' } });
+    expect(() => service.validatePayload({ provider: 'feishu', text: 'hi' })).not.toThrow();
+  });
 
-test('notification service requires receive_id for feishu-app', () => {
-  const service = createNotificationService({ env: { FEISHU_APP_ID: 'cli_x', FEISHU_APP_SECRET: 'sec_x' } });
-  assert.throws(() => service.validatePayload({ provider: 'feishu-app', text: 'hi' }), NotificationError);
-});
+  it('notification service requires receive_id for feishu-app', () => {
+    const service = createNotificationService({ env: { FEISHU_APP_ID: 'cli_x', FEISHU_APP_SECRET: 'sec_x' } });
+    expect(() => service.validatePayload({ provider: 'feishu-app', text: 'hi' })).toThrow(NotificationError);
+  });
 
-test('retry classifier respects structured retryable errors', () => {
-  assert.equal(shouldRetryNotification(new NotificationError('rate limit', { retryable: true })), true);
-  assert.equal(shouldRetryNotification(new NotificationError('bad request', { retryable: false })), false);
-});
+  it('retry classifier respects structured retryable errors', () => {
+    expect(shouldRetryNotification(new NotificationError('rate limit', { retryable: true }))).toBe(true);
+    expect(shouldRetryNotification(new NotificationError('bad request', { retryable: false }))).toBe(false);
+  });
 
-test('retry delay grows with attempts', () => {
-  const first = computeRetryDelayMs(1);
-  const second = computeRetryDelayMs(2);
-  assert.equal(first >= 1000, true);
-  assert.equal(second >= 2000, true);
+  it('retry delay grows with attempts', () => {
+    const first = computeRetryDelayMs(1);
+    const second = computeRetryDelayMs(2);
+    expect(first >= 1000).toBe(true);
+    expect(second >= 2000).toBe(true);
+  });
 });
