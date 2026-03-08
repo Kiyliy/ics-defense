@@ -206,4 +206,13 @@ export const getAuditLogs = (params) => request(http.get('/audit', { params }))
  */
 export const getAuditStats = (params = {}) => request(http.get('/audit/stats', { params }))
 
+// Notifications
+export const getNotificationChannels = () => request(http.get('/notifications/channels'))
+export const saveNotificationChannel = (data) => request(http.post('/notifications/channels', data))
+export const testNotificationChannel = (id) => request(http.post(`/notifications/channels/${id}/test`))
+export const deleteNotificationChannel = (id) => request(http.delete(`/notifications/channels/${id}`))
+export const getNotificationRules = () => request(http.get('/notifications/rules'))
+export const saveNotificationRule = (data) => request(http.put('/notifications/rules', data))
+export const getNotificationHistory = (params) => request(http.get('/notifications/history', { params }))
+
 export default http
