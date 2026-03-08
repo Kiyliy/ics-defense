@@ -2,11 +2,15 @@
 事件钩子管理器 — 在 Agent 生命周期关键节点触发动作。
 """
 
+import asyncio
+import inspect
+import json as _json
 import os
 import re
 import logging
 from typing import Any
 
+import httpx
 import yaml
 
 logger = logging.getLogger(__name__)
@@ -149,27 +153,103 @@ class HookManager:
         return False
 
     # ------------------------------------------------------------------ #
-    #  Action handlers（stub 实现）
+    #  Helpers
     # ------------------------------------------------------------------ #
 
-    def _action_log_error(self, params: dict, context: dict):
+    _ENV_VAR_RE = re.compile(r"\$\{(\w+)\}")
+
+    @classmethod
+    def _resolve_env_vars(cls, value: str) -> str:
+        """Replace ``${VAR_NAME}`` placeholders with environment variable values."""
+        def _replacer(m: re.Match) -> str:
+            return os.environ.get(m.group(1), m.group(0))
+        return cls._ENV_VAR_RE.sub(_replacer, value)
+
+    # ------------------------------------------------------------------ #
+    #  Action handlers
+    # ------------------------------------------------------------------ #
+
+    async def _action_log_error(self, params: dict, context: dict):
         logger.error("[hook:log_error] %s", context)
 
-    def _action_log_info(self, params: dict, context: dict):
+    async def _action_log_info(self, params: dict, context: dict):
         logger.info("[hook:log_info] %s", context)
 
-    def _action_push_websocket(self, params: dict, context: dict):
+    async def _action_push_websocket(self, params: dict, context: dict):
+        """Push notification via internal HTTP endpoint (WS-ready)."""
         channel = params.get("channel", "default")
-        logger.info("[hook:push_websocket] channel=%s context=%s", channel, context)
+        payload = {
+            "channel": channel,
+            "event": context.get("event", "hook"),
+            "data": context,
+        }
+        ws_url = os.environ.get(
+            "WS_NOTIFICATION_URL", "http://localhost:3002/api/notifications/push"
+        )
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.post(ws_url, json=payload)
+                resp.raise_for_status()
+                logger.info(
+                    "[hook:push_websocket] pushed channel=%s status=%s",
+                    channel, resp.status_code,
+                )
+        except Exception as exc:
+            # Fallback: structured log so messages are not lost
+            logger.warning(
+                "[hook:push_websocket] HTTP push failed (%s), logging payload: %s",
+                exc,
+                _json.dumps(payload, ensure_ascii=False, default=str),
+            )
 
-    def _action_send_webhook(self, params: dict, context: dict):
-        url = params.get("url", "")
-        logger.info("[hook:send_webhook] url=%s context=%s", url, context)
+    async def _action_send_webhook(self, params: dict, context: dict):
+        """POST context to an external webhook URL (supports Feishu card format)."""
+        raw_url = self._resolve_env_vars(params.get("url", ""))
+        if not raw_url:
+            logger.warning("[hook:send_webhook] empty URL, skipping")
+            return
 
-    def _action_send_email(self, params: dict, context: dict):
-        to = params.get("to", "")
-        subject = params.get("subject", "")
-        logger.info("[hook:send_email] to=%s subject=%s", to, subject)
+        # Build payload
+        if "feishu.cn" in raw_url:
+            payload = {
+                "msg_type": "interactive",
+                "card": {
+                    "header": {
+                        "title": {
+                            "tag": "plain_text",
+                            "content": context.get("title", "ICS Defense 通知"),
+                        },
+                        "template": "red" if context.get("severity") == "critical" else "blue",
+                    },
+                    "elements": [
+                        {
+                            "tag": "markdown",
+                            "content": _json.dumps(context, ensure_ascii=False, default=str),
+                        }
+                    ],
+                },
+            }
+        else:
+            payload = {"event": "hook_notification", "context": context}
+
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(raw_url, json=payload)
+                resp.raise_for_status()
+                logger.info(
+                    "[hook:send_webhook] url=%s status=%s", raw_url, resp.status_code
+                )
+        except Exception as exc:
+            logger.error("[hook:send_webhook] failed url=%s error=%s", raw_url, exc)
+
+    async def _action_send_email(self, params: dict, context: dict):
+        """Structured email log (aiosmtplib required for real delivery)."""
+        to = self._resolve_env_vars(params.get("to", ""))
+        subject = self._resolve_env_vars(params.get("subject", ""))
+        body = _json.dumps(context, ensure_ascii=False, default=str)
+        logger.info(
+            "[hook:send_email] to=%s subject=%s body=%s", to, subject, body
+        )
 
     _ACTION_HANDLERS = {
         "log_error": "_action_log_error",
@@ -206,7 +286,10 @@ class HookManager:
                     continue
 
                 handler = getattr(self, handler_name)
-                handler(params, context)
+                result = handler(params, context)
+                # Support both async and sync handlers (sync used in tests)
+                if inspect.isawaitable(result):
+                    await result
                 logger.debug(
                     "hook 已触发: event=%s action=%s", event_name, action
                 )
