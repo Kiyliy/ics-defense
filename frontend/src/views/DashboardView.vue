@@ -77,12 +77,15 @@ const recentAlerts = ref([])
 const chartRef = ref(null)
 let chartInstance = null
 
-const statCards = computed(() => [
-  { label: '总告警数', value: stats.value.total_alerts, icon: 'Bell', color: '#409eff' },
-  { label: '高危告警', value: stats.value.high_alerts, icon: 'Warning', color: '#f56c6c' },
-  { label: '攻击链', value: stats.value.chains, icon: 'Connection', color: '#e6a23c' },
-  { label: '待审批', value: stats.value.pending_approvals, icon: 'Checked', color: '#67c23a' },
-])
+const statCards = computed(() => {
+  const s = stats.value || {}
+  return [
+    { label: '总告警数', value: s.total_alerts ?? 0, icon: 'Bell', color: '#409eff' },
+    { label: '高危告警', value: s.high_alerts ?? 0, icon: 'Warning', color: '#f56c6c' },
+    { label: '攻击链', value: s.chains ?? 0, icon: 'Connection', color: '#e6a23c' },
+    { label: '待审批', value: s.pending_approvals ?? 0, icon: 'Checked', color: '#67c23a' },
+  ]
+})
 
 function severityType(severity) {
   const map = { critical: 'danger', high: 'warning', medium: '', low: 'info' }
@@ -139,9 +142,23 @@ onMounted(async () => {
       getDashboardTrend(),
       getAlerts({ page: 1, limit: 10 }),
     ])
-    stats.value = statsRes
-    trendData.value = trendRes.data || []
-    recentAlerts.value = alertsRes.alerts || []
+
+    // Map backend response structure to frontend stats shape
+    const summary = statsRes?.summary || {}
+    const bySeverity = statsRes?.alertsBySeverity || []
+    const highCount = bySeverity
+      .filter((s) => s.severity === 'high' || s.severity === 'critical')
+      .reduce((sum, s) => sum + (s.count || 0), 0)
+
+    stats.value = {
+      total_alerts: summary.totalAlerts ?? 0,
+      high_alerts: highCount,
+      chains: summary.totalChains ?? 0,
+      pending_approvals: summary.pendingDecisions ?? 0,
+    }
+
+    trendData.value = trendRes?.trend || []
+    recentAlerts.value = alertsRes?.alerts || []
   } catch (err) {
     console.error('Dashboard load error:', err)
   }
