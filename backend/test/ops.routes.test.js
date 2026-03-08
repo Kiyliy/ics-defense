@@ -144,7 +144,7 @@ test('audit list honors days filter and validates invalid days', async () => {
 
     const bad = await fetch(`${baseUrl}/api/audit?days=-1`);
     assert.equal(bad.status, 400);
-    assert.deepEqual(await bad.json(), { error: 'days must be a non-negative number' });
+    assert.deepEqual(await bad.json(), { error: 'days must be a positive integer' });
   });
 });
 

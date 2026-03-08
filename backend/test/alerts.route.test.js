@@ -100,10 +100,14 @@ test('GET /api/alerts applies filters and pagination', async () => {
     assert.equal(body.alerts.length, 1);
     assert.equal(body.alerts[0].severity, 'high');
     assert.equal(body.alerts[0].status, 'open');
+
+    const invalid = await fetch(`${baseUrl}/api/alerts?limit=-1&offset=0`);
+    assert.equal(invalid.status, 400);
+    assert.deepEqual(await invalid.json(), { error: 'limit must be a non-negative integer' });
   });
 });
 
-test('PATCH /api/alerts/:id/status validates status and updates alert', async () => {
+test('PATCH /api/alerts/:id/status validates status, updates alert, and returns 404 for missing alert', async () => {
   await withTestServer(async ({ db, baseUrl }) => {
     const inserted = db.prepare(`
       INSERT INTO alerts (source, severity, title, status)
@@ -117,6 +121,14 @@ test('PATCH /api/alerts/:id/status validates status and updates alert', async ()
       body: JSON.stringify({ status: 'closed' }),
     });
     assert.equal(badResponse.status, 400);
+
+    const missingResponse = await fetch(`${baseUrl}/api/alerts/999/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'resolved' }),
+    });
+    assert.equal(missingResponse.status, 404);
+    assert.deepEqual(await missingResponse.json(), { error: 'Alert not found' });
 
     const okResponse = await fetch(`${baseUrl}/api/alerts/${id}/status`, {
       method: 'PATCH',

@@ -33,8 +33,8 @@ function parseDays(rawDays) {
   }
 
   const days = Number(rawDays);
-  if (!Number.isFinite(days) || days < 0) {
-    return { ok: false, error: 'days must be a non-negative number' };
+  if (!Number.isInteger(days) || days <= 0) {
+    return { ok: false, error: 'days must be a positive integer' };
   }
 
   return { ok: true, days };
@@ -67,14 +67,22 @@ router.get('/', (/** @type {any} */ req, /** @type {any} */ res) => {
   const where = [];
   /** @type {QueryParams} */
   const params = {};
+  const parsedLimit = Number(limit);
+  const parsedOffset = Number(offset);
+  if (!Number.isInteger(parsedLimit) || parsedLimit < 0) {
+    return res.status(400).json({ error: 'limit must be a non-negative integer' });
+  }
+  if (!Number.isInteger(parsedOffset) || parsedOffset < 0) {
+    return res.status(400).json({ error: 'offset must be a non-negative integer' });
+  }
   if (trace_id) { where.push('trace_id = @trace_id'); params.trace_id = String(trace_id); }
   if (alert_id) { where.push('alert_id = @alert_id'); params.alert_id = String(alert_id); }
   where.push('created_at >= @since');
   params.since = buildSinceIso(parsedDays.days);
 
   const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
-  params.limit = Number(limit);
-  params.offset = Number(offset);
+  params.limit = parsedLimit;
+  params.offset = parsedOffset;
 
   const logs = db.prepare(
     `SELECT * FROM audit_logs ${whereClause} ORDER BY created_at ASC LIMIT @limit OFFSET @offset`

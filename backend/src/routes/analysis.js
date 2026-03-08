@@ -31,6 +31,16 @@ function getErrorMessage(error) {
 }
 
 /**
+ * @param {number[]} requestedIds
+ * @param {{ id: number }[]} alerts
+ * @returns {number[]}
+ */
+function findMissingAlertIds(requestedIds, alerts) {
+  const foundIds = new Set(alerts.map((alert) => Number(alert.id)));
+  return requestedIds.filter((id) => !foundIds.has(id));
+}
+
+/**
  * 调用 Python Agent Service 进行分析
  * 返回 trace_id 供前端轮询进度
  * @param {number[]} alertIds
@@ -117,12 +127,21 @@ export function createAnalysisRouter({
       return res.status(400).json({ error: 'alert_ids[] required' });
     }
 
+    if (!alert_ids.every((id) => Number.isInteger(id) && id > 0)) {
+      return res.status(400).json({ error: 'alert_ids must contain positive integers' });
+    }
+
     const db = req.db;
     const placeholders = alert_ids.map(() => '?').join(',');
     const alerts = db.prepare(`SELECT * FROM alerts WHERE id IN (${placeholders})`).all(...alert_ids);
 
     if (alerts.length === 0) {
       return res.status(404).json({ error: 'No alerts found' });
+    }
+
+    const missingIds = findMissingAlertIds(alert_ids, alerts);
+    if (missingIds.length > 0) {
+      return res.status(404).json({ error: 'Some alerts were not found', missing_alert_ids: missingIds });
     }
 
     try {
@@ -186,7 +205,7 @@ export function createAnalysisRouter({
     `).all();
 
     const getAlerts = db.prepare(`SELECT id, title, severity, src_ip FROM alerts WHERE id IN (SELECT value FROM json_each(?))`);
-    const getDecisions = db.prepare(`SELECT * FROM decisions WHERE attack_chain_id = ?`);
+    const getDecisions = db.prepare(`SELECT * FROM decisions WHERE attack_chain_id = ? ORDER BY created_at DESC, id DESC`);
 
     const chains = rawChains.map((/** @type {any} */ c) => {
       // Parse alert_ids and fetch related alerts
@@ -211,7 +230,10 @@ export function createAnalysisRouter({
       return {
         ...c,
         alerts,
-        decisions,
+        decisions: decisions.map((decision) => ({
+          ...decision,
+          action: decision.recommendation,
+        })),
         alert_count,
         status,
         risk_level,

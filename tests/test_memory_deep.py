@@ -28,11 +28,14 @@ async def test_simple_memory_blank_query_returns_empty():
 
 
 @pytest.mark.asyncio
-async def test_agent_memory_non_simple_provider_delegates_to_mem0_stub():
+async def test_agent_memory_non_simple_provider_uses_safe_fallback_when_mem0_missing():
     memory = AgentMemory({'provider': 'mem0', 'mem0_config': {'region': 'test'}})
 
     assert memory.provider == 'mem0'
-    assert await memory.recall('threat') is None
-    assert await memory.memorize('content') is None
-    assert await memory.list_memories() is None
-    assert await memory.delete('id') is None
+    assert getattr(memory._store, 'backend', None) in {'mem0', 'simple-fallback'}
+
+    memory_id = await memory.memorize('content')
+    assert isinstance(memory_id, str) and memory_id
+    assert await memory.recall('threat') == []
+    assert len(await memory.list_memories()) == 1
+    assert await memory.delete(memory_id) is True

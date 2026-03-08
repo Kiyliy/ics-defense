@@ -32,6 +32,15 @@ function buildAlertNotification(alert) {
 export function createNotificationsRouter({ notificationService = createNotificationService() } = {}) {
   const router = Router();
 
+  /**
+   * @param {unknown} error
+   * @returns {number}
+   */
+  function getStatusCode(error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return message.startsWith('Unsupported notification provider:') ? 400 : 500;
+  }
+
   router.get('/providers', (/** @type {any} */ _req, /** @type {any} */ res) => {
     res.json({ providers: notificationService.listProviders() });
   });
@@ -55,7 +64,7 @@ export function createNotificationsRouter({ notificationService = createNotifica
       });
       res.json(result);
     } catch (error) {
-      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+      res.status(getStatusCode(error)).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -74,7 +83,7 @@ export function createNotificationsRouter({ notificationService = createNotifica
       });
       res.json({ alert_id: alert.id, ...result });
     } catch (error) {
-      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+      res.status(getStatusCode(error)).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 

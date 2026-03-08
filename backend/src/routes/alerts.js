@@ -8,6 +8,19 @@ const router = Router();
 /** @typedef {{ [key: string]: string | number }} QueryParams */
 
 /**
+ * @param {unknown} rawValue
+ * @param {string} fieldName
+ * @returns {{ ok: true, value: number } | { ok: false, error: string }}
+ */
+function parseNonNegativeInteger(rawValue, fieldName) {
+  const value = Number(rawValue);
+  if (!Number.isInteger(value) || value < 0) {
+    return { ok: false, error: `${fieldName} must be a non-negative integer` };
+  }
+  return { ok: true, value };
+}
+
+/**
  * POST /api/alerts/ingest
  * 多源事件接入：接收原始日志，规范化后存入数据库
  *
@@ -52,6 +65,11 @@ router.get('/', (/** @type {any} */ req, /** @type {any} */ res) => {
   const { status, severity, source, limit = 50, offset = 0 } = req.query;
   const db = req.db;
 
+  const parsedLimit = parseNonNegativeInteger(limit, 'limit');
+  if (!parsedLimit.ok) return res.status(400).json({ error: parsedLimit.error });
+  const parsedOffset = parseNonNegativeInteger(offset, 'offset');
+  if (!parsedOffset.ok) return res.status(400).json({ error: parsedOffset.error });
+
   /** @type {string[]} */
   const where = [];
   /** @type {QueryParams} */
@@ -62,8 +80,8 @@ router.get('/', (/** @type {any} */ req, /** @type {any} */ res) => {
 
   const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const sql = `SELECT * FROM alerts ${whereClause} ORDER BY created_at DESC LIMIT @limit OFFSET @offset`;
-  params.limit = Number(limit);
-  params.offset = Number(offset);
+  params.limit = parsedLimit.value;
+  params.offset = parsedOffset.value;
 
   const alerts = db.prepare(sql).all(params);
   const countParams = Object.fromEntries(
@@ -96,7 +114,10 @@ router.patch('/:id/status', (/** @type {any} */ req, /** @type {any} */ res) => 
     return res.status(400).json({ error: 'Invalid status' });
   }
   const result = req.db.prepare('UPDATE alerts SET status = ? WHERE id = ?').run(status, req.params.id);
-  res.json({ updated: result.changes > 0 });
+  if (result.changes === 0) {
+    return res.status(404).json({ error: 'Alert not found' });
+  }
+  res.json({ updated: true });
 });
 
 export default router;
