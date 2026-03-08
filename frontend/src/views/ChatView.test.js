@@ -56,17 +56,7 @@ describe('ChatView', () => {
     expect(wrapper.vm.currentMessages[1].content).toBe('plain reply')
   })
 
-  it('parses structured assistant JSON and maps risk tag types', async () => {
-    const wrapper = mount(ChatView, withUiGlobal())
-    const parsed = wrapper.vm.parseAIResponse(JSON.stringify({
-      analysis: '发现异常',
-      recommendation: '隔离主机',
-      risk_level: 'high',
-      confidence: 0.8,
-    }))
-
-    expect(parsed.recommendation).toBe('隔离主机')
-    expect(wrapper.vm.parseAIResponse('not json')).toBeNull()
+  it('maps risk tag types correctly', async () => {
     const { getRiskTagType } = await import('../utils/ui.js')
     expect(getRiskTagType('high')).toBe('danger')
     expect(getRiskTagType('中')).toBe('info')

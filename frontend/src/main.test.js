@@ -23,15 +23,19 @@ vi.mock('@element-plus/icons-vue', () => ({
   ChatDotRound: { name: 'ChatDotRound' },
   Checked: { name: 'Checked' },
   Connection: { name: 'Connection' },
+  DataAnalysis: { name: 'DataAnalysis' },
   Document: { name: 'Document' },
   Expand: { name: 'Expand' },
   Fold: { name: 'Fold' },
   Loading: { name: 'Loading' },
+  Lock: { name: 'Lock' },
   MagicStick: { name: 'MagicStick' },
   Monitor: { name: 'Monitor' },
+  Notification: { name: 'Notification' },
   Plus: { name: 'Plus' },
   Promotion: { name: 'Promotion' },
   Search: { name: 'Search' },
+  Setting: { name: 'Setting' },
   Warning: { name: 'Warning' },
 }))
 
@@ -50,7 +54,7 @@ describe('main.js', () => {
 
     expect(appMocks.createApp).toHaveBeenCalled()
     expect(appMocks.createPinia).toHaveBeenCalled()
-    expect(appMocks.app.component).toHaveBeenCalledTimes(14)
+    expect(appMocks.app.component).toHaveBeenCalledTimes(18)
     expect(appMocks.app.component).toHaveBeenCalledWith('Bell', expect.any(Object))
     expect(appMocks.app.component).toHaveBeenCalledWith('Warning', expect.any(Object))
     expect(appMocks.app.use).toHaveBeenCalledTimes(2)

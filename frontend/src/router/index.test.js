@@ -33,7 +33,9 @@ vi.mock('../views/AlertListView.vue', () => ({ default: { name: 'AlertListView' 
 vi.mock('../views/AttackChainView.vue', () => ({ default: { name: 'AttackChainView' } }))
 vi.mock('../views/ChatView.vue', () => ({ default: { name: 'ChatView' } }))
 vi.mock('../views/ApprovalView.vue', () => ({ default: { name: 'ApprovalView' } }))
-vi.mock('../views/AuditView.vue', () => ({ default: { name: 'AuditView' } }))
+vi.mock('../views/AgentLogView.vue', () => ({ default: { name: 'AgentLogView' } }))
+vi.mock('../views/NotificationView.vue', () => ({ default: { name: 'NotificationView' } }))
+vi.mock('../views/SettingsView.vue', () => ({ default: { name: 'SettingsView' } }))
 
 import router from './index.js'
 
@@ -48,7 +50,7 @@ describe('router/index', () => {
     expect(router.options.routes).toHaveLength(1)
     expect(router.options.routes[0].redirect).toBe('/dashboard')
     expect(router.options.routes[0].children.map((route) => route.name)).toEqual([
-      'Dashboard', 'Alerts', 'AttackChains', 'Chat', 'Approval', 'Audit',
+      'Dashboard', 'Chat', 'Alerts', 'AttackChains', 'Approval', 'AgentLogs', 'Notifications', 'Settings',
     ])
   })
 

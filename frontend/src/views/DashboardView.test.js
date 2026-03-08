@@ -49,7 +49,7 @@ describe('DashboardView', () => {
     expect(apiMocks.getDashboardStats).toHaveBeenCalled()
     expect(apiMocks.getDashboardTrend).toHaveBeenCalled()
     expect(apiMocks.getAlerts).toHaveBeenCalledWith({ page: 1, limit: 10 })
-    expect(wrapper.find('.page-header h2').text()).toBe('指挥面板')
+    expect(wrapper.find('.page-title').text()).toBe('仪表盘')
   })
 
   it('handles dashboard loading errors without crashing', async () => {
