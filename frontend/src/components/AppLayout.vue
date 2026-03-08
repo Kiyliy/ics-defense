@@ -2,7 +2,7 @@
   <el-container style="height: 100vh">
     <el-aside :width="isCollapse ? '64px' : '220px'" style="transition: width 0.3s">
       <div class="logo-area">
-        <el-icon :size="24" color="#409eff"><Shield /></el-icon>
+        <el-icon :size="24" color="#409eff"><Warning /></el-icon>
         <span v-show="!isCollapse" class="logo-text">ICS Security</span>
       </div>
       <el-menu

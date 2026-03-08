@@ -61,9 +61,15 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
-import * as echarts from 'echarts'
+import { use } from 'echarts/core'
+import { LineChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+import { init, graphic } from 'echarts/core'
 import StatCard from '../components/StatCard.vue'
 import { getDashboardStats, getDashboardTrend, getAlerts } from '../api'
+
+use([LineChart, GridComponent, TooltipComponent, CanvasRenderer])
 
 const stats = ref({
   total_alerts: 0,
@@ -94,7 +100,7 @@ function severityType(severity) {
 
 function renderChart() {
   if (!chartRef.value) return
-  chartInstance = echarts.init(chartRef.value)
+  chartInstance = init(chartRef.value)
 
   const hours = trendData.value.map((d) => d.hour)
   const counts = trendData.value.map((d) => d.count)
@@ -119,7 +125,7 @@ function renderChart() {
         data: counts,
         smooth: true,
         areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          color: new graphic.LinearGradient(0, 0, 0, 1, [
             { offset: 0, color: 'rgba(64,158,255,0.3)' },
             { offset: 1, color: 'rgba(64,158,255,0.02)' },
           ]),
