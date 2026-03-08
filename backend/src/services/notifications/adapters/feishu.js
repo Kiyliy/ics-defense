@@ -1,6 +1,7 @@
 // @ts-check
 
 import crypto from 'node:crypto';
+import { NotificationError } from '../errors.js';
 
 /**
  * @typedef {{
@@ -24,30 +25,19 @@ import crypto from 'node:crypto';
  * }} FeishuMessageBody
  */
 
-/**
- * @param {string} secret
- * @param {number} timestamp
- */
 function genSign(secret, timestamp) {
   const stringToSign = `${timestamp}\n${secret}`;
   return crypto.createHmac('sha256', stringToSign).update('').digest('base64');
 }
 
-/**
- * @param {NotificationPayload} payload
- * @returns {FeishuMessageBody}
- */
 function buildMessageBody(payload) {
   const msgType = payload.msg_type || (payload.card ? 'interactive' : payload.title ? 'post' : 'text');
 
   if (msgType === 'interactive') {
     if (!payload.card || typeof payload.card !== 'object') {
-      throw new Error('interactive message requires card payload');
+      throw new NotificationError('interactive message requires card payload', { provider: 'feishu' });
     }
-    return {
-      msg_type: 'interactive',
-      card: payload.card,
-    };
+    return { msg_type: 'interactive', card: payload.card };
   }
 
   if (msgType === 'post') {
@@ -75,7 +65,6 @@ function buildMessageBody(payload) {
 }
 
 export class FeishuNotificationAdapter {
-  /** @param {{ webhookUrl?: string, secret?: string, fetchFn?: typeof fetch }} options */
   constructor({ webhookUrl, secret, fetchFn = fetch }) {
     this.name = 'feishu';
     this.webhookUrl = webhookUrl;
@@ -87,10 +76,9 @@ export class FeishuNotificationAdapter {
     return Boolean(this.webhookUrl);
   }
 
-  /** @param {NotificationPayload} payload */
   async send(payload) {
     if (!this.webhookUrl) {
-      throw new Error('Feishu webhook is not configured');
+      throw new NotificationError('Feishu webhook is not configured', { provider: this.name });
     }
 
     const body = buildMessageBody(payload);
@@ -100,14 +88,22 @@ export class FeishuNotificationAdapter {
       body.sign = genSign(this.secret, timestamp);
     }
 
-    const response = await this.fetchFn(this.webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    let response;
+    try {
+      response = await this.fetchFn(this.webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      throw new NotificationError(`Feishu webhook request failed: ${error instanceof Error ? error.message : String(error)}`, {
+        provider: this.name,
+        retryable: true,
+        cause: error,
+      });
+    }
 
     const rawText = await response.text();
-    /** @type {any} */
     let data = null;
     if (rawText) {
       try {
@@ -118,11 +114,21 @@ export class FeishuNotificationAdapter {
     }
 
     if (!response.ok) {
-      throw new Error(`Feishu webhook returned ${response.status}`);
+      throw new NotificationError(`Feishu webhook returned ${response.status}`, {
+        provider: this.name,
+        status: response.status,
+        retryable: response.status === 429 || response.status >= 500,
+      });
     }
 
     if (data && typeof data === 'object' && 'code' in data && data.code !== 0) {
-      throw new Error(`Feishu webhook failed: ${data.msg || data.code}`);
+      const code = String(data.code);
+      const message = String(data.msg || data.code);
+      throw new NotificationError(`Feishu webhook failed: ${message}`, {
+        provider: this.name,
+        code,
+        retryable: /frequency_limit_exceeded/i.test(message) || code === '429',
+      });
     }
 
     return {

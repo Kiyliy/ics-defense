@@ -1,33 +1,15 @@
 // @ts-check
 
-/**
- * @typedef {{
- *   provider?: string
- *   title?: string
- *   body?: string
- *   text?: string
- *   msg_type?: 'text' | 'post' | 'interactive'
- *   card?: Record<string, unknown>
- *   metadata?: Record<string, unknown>
- *   receive_id?: string
- *   receive_id_type?: 'chat_id' | 'open_id' | 'user_id' | 'union_id' | 'email'
- * }} NotificationPayload
- */
+import { NotificationError } from '../errors.js';
 
-/**
- * @param {NotificationPayload} payload
- */
 function buildMessageContent(payload) {
   const msgType = payload.msg_type || (payload.card ? 'interactive' : payload.title ? 'post' : 'text');
 
   if (msgType === 'interactive') {
     if (!payload.card || typeof payload.card !== 'object') {
-      throw new Error('interactive message requires card payload');
+      throw new NotificationError('interactive message requires card payload', { provider: 'feishu-app' });
     }
-    return {
-      msg_type: 'interactive',
-      content: JSON.stringify(payload.card),
-    };
+    return { msg_type: 'interactive', content: JSON.stringify(payload.card) };
   }
 
   if (msgType === 'post') {
@@ -36,41 +18,19 @@ function buildMessageContent(payload) {
     return {
       msg_type: 'post',
       content: JSON.stringify({
-        zh_cn: {
-          title,
-          content: [[{ tag: 'text', text: contentText }]],
-        },
+        zh_cn: { title, content: [[{ tag: 'text', text: contentText }]] },
       }),
     };
   }
 
   return {
     msg_type: 'text',
-    content: JSON.stringify({
-      text: payload.text || payload.body || payload.title || 'ICS Defense Notification',
-    }),
+    content: JSON.stringify({ text: payload.text || payload.body || payload.title || 'ICS Defense Notification' }),
   };
 }
 
 export class FeishuAppNotificationAdapter {
-  /**
-   * @param {{
-   *   appId?: string,
-   *   appSecret?: string,
-   *   defaultReceiveId?: string,
-   *   defaultReceiveIdType?: NotificationPayload['receive_id_type'],
-   *   fetchFn?: typeof fetch,
-   *   baseUrl?: string,
-   * }} options
-   */
-  constructor({
-    appId,
-    appSecret,
-    defaultReceiveId,
-    defaultReceiveIdType = 'chat_id',
-    fetchFn = fetch,
-    baseUrl = 'https://open.feishu.cn/open-apis',
-  }) {
+  constructor({ appId, appSecret, defaultReceiveId, defaultReceiveIdType = 'chat_id', fetchFn = fetch, baseUrl = 'https://open.feishu.cn/open-apis' }) {
     this.name = 'feishu-app';
     this.appId = appId;
     this.appSecret = appSecret;
@@ -86,66 +46,79 @@ export class FeishuAppNotificationAdapter {
 
   async getTenantAccessToken() {
     if (!this.appId || !this.appSecret) {
-      throw new Error('Feishu app credentials are not configured');
+      throw new NotificationError('Feishu app credentials are not configured', { provider: this.name });
     }
 
-    const response = await this.fetchFn(`${this.baseUrl}/auth/v3/tenant_access_token/internal`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify({
-        app_id: this.appId,
-        app_secret: this.appSecret,
-      }),
-    });
+    let response;
+    try {
+      response = await this.fetchFn(`${this.baseUrl}/auth/v3/tenant_access_token/internal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        body: JSON.stringify({ app_id: this.appId, app_secret: this.appSecret }),
+      });
+    } catch (error) {
+      throw new NotificationError(`Feishu app token request failed: ${error instanceof Error ? error.message : String(error)}`, {
+        provider: this.name,
+        retryable: true,
+        cause: error,
+      });
+    }
 
     const data = await response.json();
     if (!response.ok || data.code !== 0 || !data.tenant_access_token) {
-      throw new Error(`Failed to get Feishu tenant_access_token: ${data.msg || response.status}`);
+      throw new NotificationError(`Failed to get Feishu tenant_access_token: ${data.msg || response.status}`, {
+        provider: this.name,
+        status: response.status,
+        code: data?.code ? String(data.code) : undefined,
+        retryable: response.status === 429 || response.status >= 500,
+      });
     }
 
     return data.tenant_access_token;
   }
 
-  /**
-   * @param {NotificationPayload} payload
-   */
   async send(payload) {
     const receiveId = payload.receive_id || this.defaultReceiveId;
     const receiveIdType = payload.receive_id_type || this.defaultReceiveIdType;
     if (!receiveId) {
-      throw new Error('receive_id is required for feishu-app notifications');
+      throw new NotificationError('receive_id is required for feishu-app notifications', { provider: this.name });
     }
 
     const accessToken = await this.getTenantAccessToken();
     const message = buildMessageContent(payload);
-    const response = await this.fetchFn(
-      `${this.baseUrl}/im/v1/messages?receive_id_type=${encodeURIComponent(receiveIdType)}`,
-      {
+
+    let response;
+    try {
+      response = await this.fetchFn(`${this.baseUrl}/im/v1/messages?receive_id_type=${encodeURIComponent(receiveIdType)}`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json; charset=utf-8',
         },
-        body: JSON.stringify({
-          receive_id: receiveId,
-          ...message,
-        }),
-      }
-    );
+        body: JSON.stringify({ receive_id: receiveId, ...message }),
+      });
+    } catch (error) {
+      throw new NotificationError(`Feishu app bot request failed: ${error instanceof Error ? error.message : String(error)}`, {
+        provider: this.name,
+        retryable: true,
+        cause: error,
+      });
+    }
 
     const data = await response.json();
     if (!response.ok || data.code !== 0) {
-      throw new Error(`Feishu app bot failed: ${data.msg || response.status}`);
+      throw new NotificationError(`Feishu app bot failed: ${data.msg || response.status}`, {
+        provider: this.name,
+        status: response.status,
+        code: data?.code ? String(data.code) : undefined,
+        retryable: response.status === 429 || response.status >= 500,
+      });
     }
 
     return {
       provider: this.name,
       delivered: true,
-      request: {
-        receive_id: receiveId,
-        receive_id_type: receiveIdType,
-        ...message,
-      },
+      request: { receive_id: receiveId, receive_id_type: receiveIdType, ...message },
       response: data,
     };
   }
