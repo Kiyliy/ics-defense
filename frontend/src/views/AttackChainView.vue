@@ -45,11 +45,15 @@
               <h4 style="margin-bottom: 8px; color: #606266">决策 (Decisions)</h4>
               <el-table :data="row.decisions || []" size="small" border>
                 <el-table-column prop="id" label="ID" width="80" />
-                <el-table-column prop="action" label="动作" min-width="200" show-overflow-tooltip />
+                <el-table-column label="动作/建议" min-width="220" show-overflow-tooltip>
+                  <template #default="{ row: dec }">
+                    {{ dec.recommendation || dec.action_type || '-' }}
+                  </template>
+                </el-table-column>
                 <el-table-column prop="status" label="状态" width="120">
                   <template #default="{ row: dec }">
                     <el-tag
-                      :type="dec.status === 'approved' ? 'success' : dec.status === 'rejected' ? 'danger' : 'warning'"
+                      :type="dec.status === 'accepted' ? 'success' : dec.status === 'rejected' ? 'danger' : 'warning'"
                       size="small"
                     >
                       {{ dec.status }}
@@ -62,7 +66,7 @@
                       <el-button
                         type="success"
                         size="small"
-                        @click="handleDecision(dec.id, 'approved')"
+                        @click="handleDecision(dec.id, 'accepted')"
                       >
                         批准
                       </el-button>
@@ -103,6 +107,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getAttackChains, updateDecision } from '../api'
+import { normalizeAttackChain } from '../api/view-models.js'
 
 const chains = ref([])
 const loading = ref(false)
@@ -121,7 +126,7 @@ async function fetchChains() {
   loading.value = true
   try {
     const res = await getAttackChains()
-    chains.value = res.chains || []
+    chains.value = (res.chains || []).map(normalizeAttackChain)
   } catch (err) {
     console.error('Failed to fetch chains:', err)
   } finally {
@@ -133,7 +138,7 @@ async function handleDecision(decisionId, status) {
   try {
     await updateDecision(decisionId, status)
     ElMessage.success('决策已更新')
-    fetchChains()
+    await fetchChains()
   } catch (err) {
     ElMessage.error('操作失败')
   }

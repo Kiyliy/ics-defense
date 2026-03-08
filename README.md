@@ -228,12 +228,12 @@ curl http://localhost:3000/api/analysis/chains
 curl -X POST http://localhost:3000/api/notifications/test \
   -H 'Content-Type: application/json' \
   -d '{
-    "provider": "feishu-app",
+    "provider": "feishu",
     "text": "ICS Defense 通知链路测试"
   }'
 ```
 
-### 发送告警到飞书应用机器人
+### 发送告警到飞书机器人
 
 ```bash
 curl -X POST http://localhost:3000/api/notifications/alerts/1/send \
@@ -282,6 +282,13 @@ curl -X POST http://localhost:3000/api/notifications/alerts/1/send \
 - `POST /approval/{approval_id}/respond`
 
 ## 本地开发
+
+### PM2 管理约定
+
+- 当前开发环境中的后端服务由 `PM2` 管理，进程名为 `ics-backend`
+- 修改 `backend/.env` 或后端代码后，优先执行 `pm2 restart ics-backend`
+- 不要额外手工启动新的 `node src/server.js` 实例，避免端口 `3002` 冲突
+- 常用检查命令：`pm2 list`、`pm2 describe ics-backend`、`pm2 logs ics-backend --lines 100`
 
 ### Backend
 

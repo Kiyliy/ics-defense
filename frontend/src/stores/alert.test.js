@@ -51,14 +51,20 @@ describe('alert store', () => {
     expect(store.loading).toBe(false)
   })
 
-  it('fetchAlertDetail stores current alert when request succeeds', async () => {
+  it('fetchAlertDetail stores current alert when request succeeds and clears stale detail on failure', async () => {
     const store = useAlertStore()
-    apiMocks.getAlertDetail.mockResolvedValue({ id: 8, title: 'alert' })
+    apiMocks.getAlertDetail.mockResolvedValueOnce({ id: 8, title: 'alert' })
 
     await store.fetchAlertDetail(8)
 
     expect(apiMocks.getAlertDetail).toHaveBeenCalledWith(8)
     expect(store.currentAlert).toEqual({ id: 8, title: 'alert' })
+
+    apiMocks.getAlertDetail.mockRejectedValueOnce(new Error('detail failed'))
+    await store.fetchAlertDetail(9)
+
+    expect(apiMocks.getAlertDetail).toHaveBeenLastCalledWith(9)
+    expect(store.currentAlert).toBeNull()
   })
 
   it('submitAnalysis short-circuits empty selection and handles success/failure', async () => {

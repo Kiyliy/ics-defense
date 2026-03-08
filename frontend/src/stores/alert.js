@@ -68,10 +68,14 @@ export const useAlertStore = defineStore('alert', () => {
 
   /** @param {number} id */
   async function fetchAlertDetail(id) {
+    currentAlert.value = null
     try {
       currentAlert.value = await getAlertDetail(id)
+      return currentAlert.value
     } catch (err) {
       console.error('Failed to fetch alert detail:', getErrorMessage(err))
+      currentAlert.value = null
+      return null
     }
   }
 

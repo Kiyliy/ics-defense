@@ -117,7 +117,9 @@
           placeholder="输入安全分析问题..."
           resize="none"
           @keydown.enter.ctrl="handleSend"
+          @keydown.enter.meta="handleSend"
         />
+        <div class="input-hint">按 <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Enter</kbd> 发送，单独 Enter 换行</div>
         <el-button
           type="primary"
           :loading="sending"
@@ -135,8 +137,8 @@
 <script setup>
 import { ref, nextTick, computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import { marked } from 'marked'
 import { chatWithAI } from '../api'
+import { renderMarkdownSafe } from '../api/markdown.js'
 
 const conversations = ref([{ title: '新对话', messages: [] }])
 const currentConvIndex = ref(0)
@@ -149,11 +151,7 @@ const currentMessages = computed(() => {
 })
 
 function renderMarkdown(text) {
-  try {
-    return marked.parse(text || '')
-  } catch {
-    return text
-  }
+  return renderMarkdownSafe(text)
 }
 
 function parseAIResponse(content) {
@@ -264,6 +262,21 @@ async function handleSend() {
   padding: 12px 16px;
   display: flex;
   flex-direction: column;
+}
+
+.input-hint {
+  margin-top: 8px;
+  color: #909399;
+  font-size: 12px;
+}
+
+kbd {
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  padding: 0 4px;
+  background: #f5f7fa;
+  font-family: inherit;
+  font-size: 12px;
 }
 
 .conv-item {

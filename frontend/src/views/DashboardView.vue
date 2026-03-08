@@ -19,7 +19,7 @@
     <!-- 告警趋势图 -->
     <el-card shadow="hover" style="margin-bottom: 20px">
       <template #header>
-        <span style="font-weight: 600">24 小时告警趋势</span>
+        <span style="font-weight: 600">近 7 天告警趋势</span>
       </template>
       <div ref="chartRef" style="height: 320px"></div>
     </el-card>
@@ -68,6 +68,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { init, graphic } from 'echarts/core'
 import StatCard from '../components/StatCard.vue'
 import { getDashboardStats, getDashboardTrend, getAlerts } from '../api'
+import { buildTrendSeries } from '../api/view-models.js'
 
 use([LineChart, GridComponent, TooltipComponent, CanvasRenderer])
 
@@ -102,15 +103,14 @@ function renderChart() {
   if (!chartRef.value) return
   chartInstance = init(chartRef.value)
 
-  const hours = trendData.value.map((d) => d.hour)
-  const counts = trendData.value.map((d) => d.count)
+  const { labels, counts } = buildTrendSeries(trendData.value)
 
   chartInstance.setOption({
     tooltip: { trigger: 'axis' },
     grid: { left: 50, right: 30, top: 30, bottom: 30 },
     xAxis: {
       type: 'category',
-      data: hours,
+      data: labels,
       axisLabel: { color: '#8c8c8c' },
     },
     yAxis: {

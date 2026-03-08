@@ -7,7 +7,7 @@ import axios from 'axios'
  */
 
 /**
- * @typedef {'open' | 'analyzing' | 'closed' | 'ignored' | string} AlertStatus
+ * @typedef {'open' | 'analyzing' | 'resolved' | string} AlertStatus
  */
 
 /**
@@ -75,6 +75,15 @@ const http = axios.create({
   timeout: 30000,
 })
 
+function resolveAgentStatusUrl() {
+  if (typeof window === 'undefined') {
+    return 'http://127.0.0.1:8000/status'
+  }
+
+  const { protocol, hostname } = window.location
+  return `${protocol}//${hostname}:8000/status`
+}
+
 http.interceptors.response.use(
   (res) => res.data,
   (err) => {
@@ -84,6 +93,30 @@ http.interceptors.response.use(
 )
 
 // Dashboard
+export const getBackendHealth = () => unwrap(http.get('/health'))
+
+/**
+ * @param {{ url?: string, fetchImpl?: typeof fetch }} [options]
+ * @returns {Promise<{ status: string, mcp_connected?: boolean, mcp_servers?: string[], running_tasks?: number, db_path?: string }>}
+ */
+export async function getAgentStatus(options = {}) {
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch
+  if (typeof fetchImpl !== 'function') {
+    throw new Error('fetch is unavailable in current environment')
+  }
+
+  const response = await fetchImpl(options.url ?? resolveAgentStatusUrl(), {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Agent status request failed with ${response.status}`)
+  }
+
+  return response.json()
+}
+
 export const getDashboardStats = () => unwrap(http.get('/dashboard/stats'))
 export const getDashboardTrend = () => unwrap(http.get('/dashboard/trend'))
 
