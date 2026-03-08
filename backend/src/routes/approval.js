@@ -1,3 +1,5 @@
+// @ts-check
+
 import { Router } from 'express';
 
 const router = Router();
@@ -6,15 +8,17 @@ const router = Router();
  * GET /api/approval
  * 查询审批列表，支持 ?status=pending 过滤
  */
-router.get('/', (req, res) => {
+router.get('/', (/** @type {any} */ req, /** @type {any} */ res) => {
   const { status } = req.query;
   const db = req.db;
 
-  let where = [];
-  let params = {};
+  /** @type {string[]} */
+  const where = [];
+  /** @type {Record<string, string>} */
+  const params = {};
   if (status) {
     where.push('status = @status');
-    params.status = status;
+    params.status = String(status);
   }
 
   const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
@@ -32,7 +36,7 @@ router.get('/', (req, res) => {
  * GET /api/approval/:id
  * 查询单个审批详情
  */
-router.get('/:id', (req, res) => {
+router.get('/:id', (/** @type {any} */ req, /** @type {any} */ res) => {
   const db = req.db;
   const approval = db.prepare('SELECT * FROM approval_queue WHERE id = ?').get(req.params.id);
 
@@ -48,7 +52,7 @@ router.get('/:id', (req, res) => {
  * 审批操作：approved / rejected
  * Body: { status: "approved" | "rejected", reason: "可选原因" }
  */
-router.patch('/:id', (req, res) => {
+router.patch('/:id', (/** @type {any} */ req, /** @type {any} */ res) => {
   const { status, reason } = req.body;
   const db = req.db;
 
@@ -56,7 +60,6 @@ router.patch('/:id', (req, res) => {
     return res.status(400).json({ error: 'status must be approved or rejected' });
   }
 
-  // 检查当前状态是否为 pending
   const current = db.prepare('SELECT * FROM approval_queue WHERE id = ?').get(req.params.id);
   if (!current) {
     return res.status(404).json({ error: 'Approval not found' });

@@ -1,3 +1,5 @@
+// @ts-check
+
 import { Router } from 'express';
 
 const router = Router();
@@ -6,7 +8,7 @@ const router = Router();
  * GET /api/dashboard/stats
  * 指挥面板统计数据
  */
-router.get('/stats', (req, res) => {
+router.get('/stats', (/** @type {any} */ req, /** @type {any} */ res) => {
   const db = req.db;
 
   const alertsByStatus = db.prepare(`
@@ -56,7 +58,7 @@ router.get('/stats', (req, res) => {
  * GET /api/dashboard/trend
  * 最近7天告警趋势
  */
-router.get('/trend', (req, res) => {
+router.get('/trend', (/** @type {any} */ req, /** @type {any} */ res) => {
   const trend = req.db.prepare(`
     SELECT date(created_at) as date, COUNT(*) as count
     FROM alerts
@@ -71,7 +73,7 @@ router.get('/trend', (req, res) => {
  * GET /api/dashboard/assets
  * 资产列表
  */
-router.get('/assets', (req, res) => {
+router.get('/assets', (/** @type {any} */ req, /** @type {any} */ res) => {
   const assets = req.db.prepare(`
     SELECT a.*,
       (SELECT COUNT(*) FROM alerts WHERE dst_ip = a.ip) as alert_count
@@ -85,7 +87,7 @@ router.get('/assets', (req, res) => {
  * POST /api/dashboard/assets
  * 添加资产
  */
-router.post('/assets', (req, res) => {
+router.post('/assets', (/** @type {any} */ req, /** @type {any} */ res) => {
   const { ip, hostname, type, importance } = req.body;
   if (!ip) return res.status(400).json({ error: 'ip required' });
 

@@ -1,3 +1,5 @@
+// @ts-check
+
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'fs';
 import { dirname } from 'path';
@@ -96,6 +98,10 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_audit_alert ON audit_logs(alert_id);
 `;
 
+/**
+ * @param {string} dbPath
+ * @returns {any}
+ */
 export function initDB(dbPath) {
   mkdirSync(dirname(dbPath), { recursive: true });
   const db = new Database(dbPath);

@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import sqlite3
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Optional
 from uuid import uuid4
@@ -37,16 +38,6 @@ logger = logging.getLogger(__name__)
 DB_PATH = os.environ.get("DB_PATH", "./data/ics-defense.db")
 MCP_CONFIG_PATH = os.environ.get("MCP_CONFIG_PATH", "agent/mcp_servers.yaml")
 LLM_MODEL = os.environ.get("XAI_MODEL", DEFAULT_MODEL)
-
-# ---------------------------------------------------------------------------
-# FastAPI 应用
-# ---------------------------------------------------------------------------
-
-app = FastAPI(
-    title="ICS Defense Agent Service",
-    description="工控安全 AI Agent 分析服务",
-    version="1.0.0",
-)
 
 # 全局状态
 _mcp_client: Optional[MCPClient] = None
@@ -107,8 +98,7 @@ class StatusResponse(BaseModel):
 # 生命周期
 # ---------------------------------------------------------------------------
 
-@app.on_event("startup")
-async def startup():
+async def startup() -> None:
     """启动时初始化 MCP 客户端"""
     global _mcp_client
     try:
@@ -124,8 +114,7 @@ async def startup():
         _mcp_client = None
 
 
-@app.on_event("shutdown")
-async def shutdown():
+async def shutdown() -> None:
     """关闭时清理资源"""
     global _mcp_client
     if _mcp_client:
@@ -140,6 +129,27 @@ async def shutdown():
         task = task_info.get("task")
         if task and not task.done():
             task.cancel()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    await startup()
+    try:
+        yield
+    finally:
+        await shutdown()
+
+
+# ---------------------------------------------------------------------------
+# FastAPI 应用
+# ---------------------------------------------------------------------------
+
+app = FastAPI(
+    title="ICS Defense Agent Service",
+    description="工控安全 AI Agent 分析服务",
+    version="1.0.0",
+    lifespan=lifespan,
+)
 
 
 # ---------------------------------------------------------------------------

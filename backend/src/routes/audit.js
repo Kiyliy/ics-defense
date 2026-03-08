@@ -1,19 +1,42 @@
+// @ts-check
+
 import { Router } from 'express';
 
 const router = Router();
 
 /**
+ * @typedef {{ input_tokens?: number, prompt_tokens?: number, output_tokens?: number, completion_tokens?: number }} TokenUsage
+ */
+
+/** @typedef {{ [key: string]: string | number }} QueryParams */
+
+/**
+ * @param {string | null | undefined} raw
+ * @returns {TokenUsage | null}
+ */
+function parseTokenUsage(raw) {
+  if (!raw) return null;
+  try {
+    return /** @type {TokenUsage} */ (JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+/**
  * GET /api/audit
  * 查询审计日志，支持 trace_id / alert_id 过滤和分页
  */
-router.get('/', (req, res) => {
+router.get('/', (/** @type {any} */ req, /** @type {any} */ res) => {
   const { trace_id, alert_id, limit = 50, offset = 0 } = req.query;
   const db = req.db;
 
-  let where = [];
-  let params = {};
-  if (trace_id) { where.push('trace_id = @trace_id'); params.trace_id = trace_id; }
-  if (alert_id) { where.push('alert_id = @alert_id'); params.alert_id = alert_id; }
+  /** @type {string[]} */
+  const where = [];
+  /** @type {QueryParams} */
+  const params = {};
+  if (trace_id) { where.push('trace_id = @trace_id'); params.trace_id = String(trace_id); }
+  if (alert_id) { where.push('alert_id = @alert_id'); params.alert_id = String(alert_id); }
 
   const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
   params.limit = Number(limit);
@@ -25,7 +48,7 @@ router.get('/', (req, res) => {
   const total = db.prepare(
     `SELECT COUNT(*) as count FROM audit_logs ${whereClause}`
   ).get(
-    Object.fromEntries(Object.entries(params).filter(([k]) => !['limit', 'offset'].includes(k)))
+    Object.fromEntries(Object.entries(params).filter(([key]) => !['limit', 'offset'].includes(key)))
   );
 
   res.json({ logs, total: total.count });
@@ -35,7 +58,7 @@ router.get('/', (req, res) => {
  * GET /api/audit/stats
  * Token 用量统计，支持 ?days=7
  */
-router.get('/stats', (req, res) => {
+router.get('/stats', (/** @type {any} */ req, /** @type {any} */ res) => {
   const { days = 7 } = req.query;
   const db = req.db;
   const daysNum = Number(days);
@@ -44,38 +67,34 @@ router.get('/stats', (req, res) => {
   since.setDate(since.getDate() - daysNum);
   const sinceStr = since.toISOString();
 
-  // 总分析次数（不同 trace_id 数量）
   const totalAnalyses = db.prepare(
     `SELECT COUNT(DISTINCT trace_id) as count FROM audit_logs WHERE created_at >= ?`
   ).get(sinceStr);
 
-  // 获取所有有 token_usage 的记录
   const tokenRows = db.prepare(
     `SELECT token_usage, DATE(created_at) as date FROM audit_logs WHERE token_usage IS NOT NULL AND created_at >= ?`
   ).all(sinceStr);
 
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
+  /** @type {Record<string, { date: string, analyses: number, tokens: number }>} */
   const dailyMap = {};
 
   for (const row of tokenRows) {
-    try {
-      const usage = JSON.parse(row.token_usage);
-      const input = usage.input_tokens || usage.prompt_tokens || 0;
-      const output = usage.output_tokens || usage.completion_tokens || 0;
-      totalInputTokens += input;
-      totalOutputTokens += output;
+    const usage = parseTokenUsage(row.token_usage);
+    if (!usage) continue;
 
-      if (!dailyMap[row.date]) {
-        dailyMap[row.date] = { date: row.date, analyses: 0, tokens: 0 };
-      }
-      dailyMap[row.date].tokens += input + output;
-    } catch {
-      // 跳过无法解析的记录
+    const input = usage.input_tokens || usage.prompt_tokens || 0;
+    const output = usage.output_tokens || usage.completion_tokens || 0;
+    totalInputTokens += input;
+    totalOutputTokens += output;
+
+    if (!dailyMap[row.date]) {
+      dailyMap[row.date] = { date: row.date, analyses: 0, tokens: 0 };
     }
+    dailyMap[row.date].tokens += input + output;
   }
 
-  // 统计每日分析次数
   const dailyAnalyses = db.prepare(
     `SELECT DATE(created_at) as date, COUNT(DISTINCT trace_id) as analyses
      FROM audit_logs WHERE created_at >= ?
@@ -89,7 +108,7 @@ router.get('/stats', (req, res) => {
     dailyMap[row.date].analyses = row.analyses;
   }
 
-  const daily = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
+  const daily = Object.values(dailyMap).sort((left, right) => left.date.localeCompare(right.date));
 
   res.json({
     total_analyses: totalAnalyses.count,
@@ -103,7 +122,7 @@ router.get('/stats', (req, res) => {
  * GET /api/audit/trace/:trace_id
  * 查询完整推理链
  */
-router.get('/trace/:trace_id', (req, res) => {
+router.get('/trace/:trace_id', (/** @type {any} */ req, /** @type {any} */ res) => {
   const db = req.db;
   const { trace_id } = req.params;
 
@@ -117,15 +136,11 @@ router.get('/trace/:trace_id', (req, res) => {
 
   let totalTokens = 0;
   for (const log of logs) {
-    if (log.token_usage) {
-      try {
-        const usage = JSON.parse(log.token_usage);
-        totalTokens += (usage.input_tokens || usage.prompt_tokens || 0)
-                     + (usage.output_tokens || usage.completion_tokens || 0);
-      } catch {
-        // 跳过无法解析的记录
-      }
-    }
+    const usage = parseTokenUsage(log.token_usage);
+    if (!usage) continue;
+
+    totalTokens += (usage.input_tokens || usage.prompt_tokens || 0)
+      + (usage.output_tokens || usage.completion_tokens || 0);
   }
 
   res.json({
