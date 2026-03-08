@@ -1,0 +1,17 @@
+{
+  "name": "ics-defense-backend",
+  "version": "0.1.0",
+  "description": "AI驱动的工控安全指挥决策一体机 - 后端服务",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.0",
+    "better-sqlite3": "^11.0.0",
+    "openai": "^4.80.0"
+  }
+}

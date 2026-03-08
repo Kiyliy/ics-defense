@@ -1,0 +1,22 @@
+tool_levels:
+  auto:
+    - search_alerts
+    - search_raw_events
+    - get_alert_context
+    - match_rules
+    - get_rules
+    - lookup_technique
+    - lookup_tactic
+    - map_alert_to_mitre
+    - recall
+    - memorize
+    - list_memories
+  notify:
+    - send_webhook
+    - send_email
+    - push_websocket
+    - add_watch
+  approve:
+    - block_ip
+    - isolate_host
+approval_timeout: 300

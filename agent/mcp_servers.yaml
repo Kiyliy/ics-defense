@@ -1,0 +1,24 @@
+servers:
+  - name: log-search
+    command: python3
+    args: ["mcp-servers/log-search/server.py"]
+
+  - name: rule-engine
+    command: python3
+    args: ["mcp-servers/rule-engine/server.py"]
+
+  - name: mitre-kb
+    command: python3
+    args: ["mcp-servers/mitre-kb/server.py"]
+
+  - name: action-executor
+    command: python3
+    args: ["mcp-servers/action-executor/server.py"]
+
+  - name: notifier
+    command: python3
+    args: ["mcp-servers/notifier/server.py"]
+
+  - name: memory
+    command: python3
+    args: ["mcp-servers/memory/server.py"]

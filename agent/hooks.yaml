@@ -1,0 +1,29 @@
+hooks:
+  on_alert_received:
+    - condition: "severity == 'critical'"
+      action: push_websocket
+      params:
+        channel: "critical_alerts"
+
+  on_decision_made:
+    - condition: "risk_level >= 'high'"
+      action: send_webhook
+      params:
+        url: "${WEBHOOK_URL}"
+    - condition: "always"
+      action: push_websocket
+      params:
+        channel: "decisions"
+
+  on_error:
+    - condition: "always"
+      action: log_error
+    - condition: "consecutive_errors >= 3"
+      action: send_email
+      params:
+        to: "${ADMIN_EMAIL}"
+        subject: "Agent 连续失败告警"
+
+  on_loop_finished:
+    - condition: "always"
+      action: log_info

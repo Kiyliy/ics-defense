@@ -1,0 +1,30 @@
+# Node.js Express 后端镜像
+# RESTful API 服务：告警管理、AI分析、审批流、审计日志
+
+FROM node:20-slim
+
+# 设置工作目录
+WORKDIR /app
+
+# 先复制 package.json，利用 Docker 缓存层加速构建
+COPY backend/package.json backend/package-lock.json* ./
+
+# 安装生产依赖（better-sqlite3 需要编译原生模块）
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3 make g++ && \
+    npm install --omit=dev && \
+    apt-get purge -y python3 make g++ && \
+    apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
+
+# 复制后端源码
+COPY backend/src/ ./src/
+
+# 创建数据目录
+RUN mkdir -p /app/data
+
+# 暴露后端端口
+EXPOSE 3000
+
+# 启动后端服务
+CMD ["node", "src/server.js"]

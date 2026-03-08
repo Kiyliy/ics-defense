@@ -1,0 +1,117 @@
+# ICS 安全防御平台 - Docker Compose 编排配置
+# 包含: Redis消息队列、Python Agent服务、Node.js后端、Vue3前端
+#
+# 环境变量统一管理说明：
+# - 公共 LLM 变量放在 backend/.env，由 compose 通过 env_file 注入
+# - 容器内服务地址/端口在 compose 的 environment 中覆盖
+
+
+x-app-env: &app-env
+  env_file:
+    - ./backend/.env
+
+services:
+  # ----------------------------------------------------------------
+  # Redis 7 - 消息队列 (Streams)
+  # 用于 Collector 和 Agent Service 之间的告警数据传递
+  # ----------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: ics-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ----------------------------------------------------------------
+  # Python FastAPI Agent Service
+  # 核心 AI 分析引擎：接收告警 → Plan & Execute → 输出决策
+  # MCP Server 由 Agent 通过 stdio 启动，不需要单独容器
+  # ----------------------------------------------------------------
+  agent-service:
+    <<: *app-env
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: ics-agent-service
+    ports:
+      - "${AGENT_SERVICE_PORT:-8000}:8000"
+    environment:
+      DB_PATH: /app/data/ics-defense.db
+      REDIS_URL: redis://redis:6379
+      MCP_CONFIG_PATH: /app/agent/mcp_servers.yaml
+      ICS_DB_PATH: /app/data/ics-defense.db
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ics-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/status')"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ----------------------------------------------------------------
+  # Node.js Express 后端
+  # RESTful API：告警管理、攻击链查看、审批流、审计日志
+  # ----------------------------------------------------------------
+  backend:
+    <<: *app-env
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: ics-backend
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
+    environment:
+      DB_PATH: /app/data/ics-defense.db
+      AGENT_SERVICE_URL: http://agent-service:8000
+      PORT: 3000
+    depends_on:
+      agent-service:
+        condition: service_healthy
+    volumes:
+      - ics-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>{if(!r.ok)throw 1})"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ----------------------------------------------------------------
+  # Vue3 前端 (nginx 静态托管)
+  # 指挥面板 UI：告警大屏、攻击链可视化、审批操作、AI对话
+  # ----------------------------------------------------------------
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: ics-frontend
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+# ----------------------------------------------------------------
+# 共享数据卷
+# SQLite 数据库在 agent-service 和 backend 之间共享
+# ----------------------------------------------------------------
+volumes:
+  redis-data:
+    driver: local
+  ics-data:
+    driver: local
