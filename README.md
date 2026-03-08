@@ -109,6 +109,13 @@ Docker Compose 启动时最关键的变量有：
 - `XAI_API_KEY`
 - `XAI_BASE_URL`
 - `XAI_MODEL`
+- `NOTIFICATION_PROVIDER`
+- `FEISHU_BOT_WEBHOOK_URL`（启用飞书机器人时）
+- `FEISHU_BOT_SECRET`（飞书开启签名校验时）
+- `FEISHU_APP_ID`（飞书应用机器人）
+- `FEISHU_APP_SECRET`（飞书应用机器人）
+- `FEISHU_APP_RECEIVE_ID`（默认接收对象，如 chat_id）
+- `FEISHU_APP_RECEIVE_ID_TYPE`（默认 `chat_id`）
 
 如果宿主机端口冲突，也可以在启动时覆盖：
 - `REDIS_PORT`
@@ -215,6 +222,25 @@ curl http://localhost:8000/analyze/<trace_id>
 curl http://localhost:3000/api/analysis/chains
 ```
 
+### 发送通知测试
+
+```bash
+curl -X POST http://localhost:3000/api/notifications/test \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "provider": "feishu-app",
+    "text": "ICS Defense 通知链路测试"
+  }'
+```
+
+### 发送告警到飞书应用机器人
+
+```bash
+curl -X POST http://localhost:3000/api/notifications/alerts/1/send \
+  -H 'Content-Type: application/json' \
+  -d '{"provider":"feishu"}'
+```
+
 ## 结构化输出设计
 
 本项目的 AI 分析链路默认采用严格结构化输出。
@@ -244,6 +270,9 @@ curl http://localhost:3000/api/analysis/chains
 - `PATCH /api/approval/:id`
 - `GET /api/audit`
 - `GET /api/audit/stats`
+- `GET /api/notifications/providers`
+- `POST /api/notifications/test`
+- `POST /api/notifications/alerts/:id/send`
 
 ### Agent Service
 - `GET /status`
