@@ -50,8 +50,8 @@ export const useAlertStore = defineStore('alert', () => {
       if (filters.value.severity) params.severity = filters.value.severity
       if (filters.value.source) params.source = filters.value.source
       if (filters.value.status) params.status = filters.value.status
-      params.page = filters.value.page
       params.limit = filters.value.limit
+      params.offset = (filters.value.page - 1) * filters.value.limit
 
       /** @type {AlertsResponse} */
       const res = await getAlerts(params)

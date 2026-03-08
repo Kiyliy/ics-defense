@@ -30,8 +30,8 @@ describe('alert store', () => {
       severity: 'high',
       source: 'waf',
       status: 'open',
-      page: 2,
       limit: 10,
+      offset: 10,
     })
     expect(store.alerts).toEqual([{ id: 1 }])
     expect(store.total).toBe(11)

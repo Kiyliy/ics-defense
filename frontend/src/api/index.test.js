@@ -67,13 +67,13 @@ describe('frontend api client', () => {
     expect(await api.getApprovals({ status: 'pending' })).toBe('get-ok')
     expect(httpClient.get).toHaveBeenLastCalledWith('/approval', { params: { status: 'pending' } })
 
-    expect(await api.respondApproval(4, 'approved', 'ok')).toBe('post-ok')
-    expect(httpClient.post).toHaveBeenLastCalledWith('/approval/4/respond', { status: 'approved', reason: 'ok' })
+    expect(await api.respondApproval(4, 'approved', 'ok')).toBe('patch-ok')
+    expect(httpClient.patch).toHaveBeenLastCalledWith('/approval/4', { status: 'approved', reason: 'ok' })
 
     expect(await api.getAuditLogs({ trace_id: 't-1' })).toBe('get-ok')
     expect(httpClient.get).toHaveBeenLastCalledWith('/audit', { params: { trace_id: 't-1' } })
 
     expect(await api.getAuditStats()).toBe('get-ok')
-    expect(httpClient.get).toHaveBeenLastCalledWith('/audit/stats')
+    expect(httpClient.get).toHaveBeenLastCalledWith('/audit/stats', { params: {} })
   })
 })

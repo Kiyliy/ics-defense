@@ -28,10 +28,10 @@
             clearable
             style="width: 130px"
           >
-            <el-option label="Snort" value="snort" />
-            <el-option label="Suricata" value="suricata" />
-            <el-option label="SIEM" value="siem" />
-            <el-option label="Firewall" value="firewall" />
+            <el-option label="WAF" value="waf" />
+            <el-option label="NIDS" value="nids" />
+            <el-option label="HIDS" value="hids" />
+            <el-option label="SOC" value="soc" />
           </el-select>
         </el-form-item>
 
@@ -43,7 +43,7 @@
             style="width: 130px"
           >
             <el-option label="Open" value="open" />
-            <el-option label="In Progress" value="in_progress" />
+            <el-option label="Analyzing" value="analyzing" />
             <el-option label="Resolved" value="resolved" />
           </el-select>
         </el-form-item>
@@ -162,7 +162,7 @@ function severityType(severity) {
 }
 
 function statusType(status) {
-  const map = { open: 'danger', in_progress: 'warning', resolved: 'success' }
+  const map = { open: 'danger', analyzing: 'warning', resolved: 'success' }
   return map[status] || 'info'
 }
 
@@ -182,15 +182,29 @@ function handleSelectionChange(rows) {
 async function handleAnalyze() {
   const res = await store.submitAnalysis()
   if (res) {
-    ElMessage.success(`分析已提交，Trace ID: ${res.trace_id}`)
+    if (res.trace_id) {
+      ElMessage.success(`分析已提交，Trace ID: ${res.trace_id}`)
+    } else if (res.attack_chain_id) {
+      ElMessage.success(`分析完成，攻击链 ID: ${res.attack_chain_id}`)
+    } else {
+      ElMessage.success('分析请求已完成')
+    }
   } else {
     ElMessage.error('分析提交失败')
   }
 }
 
-function showDetail(row) {
-  currentDetail.value = row
+async function showDetail(row) {
   detailVisible.value = true
+  currentDetail.value = row
+
+  try {
+    await store.fetchAlertDetail(row.id)
+    if (store.currentAlert) {
+      currentDetail.value = store.currentAlert
+    }
+  } catch {
+  }
 }
 
 onMounted(() => {

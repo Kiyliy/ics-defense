@@ -43,7 +43,60 @@
           :class="['message-row', msg.role]"
         >
           <div :class="['chat-bubble', msg.role]">
-            <div v-if="msg.role === 'assistant'" v-html="renderMarkdown(msg.content)"></div>
+            <template v-if="msg.role === 'assistant'">
+              <!-- Structured AI response -->
+              <template v-if="parseAIResponse(msg.content)">
+                <div class="ai-structured">
+                  <div class="ai-analysis" v-html="renderMarkdown(parseAIResponse(msg.content).analysis || '')"></div>
+
+                  <div class="ai-tags" v-if="parseAIResponse(msg.content).risk_level || parseAIResponse(msg.content).confidence">
+                    <el-tag
+                      v-if="parseAIResponse(msg.content).risk_level"
+                      :type="riskTagType(parseAIResponse(msg.content).risk_level)"
+                      size="small"
+                    >风险等级: {{ parseAIResponse(msg.content).risk_level }}</el-tag>
+                    <el-tag
+                      v-if="parseAIResponse(msg.content).confidence"
+                      type="info"
+                      size="small"
+                    >置信度: {{ parseAIResponse(msg.content).confidence }}</el-tag>
+                    <el-tag
+                      v-if="parseAIResponse(msg.content).action_type"
+                      type="warning"
+                      size="small"
+                    >动作: {{ parseAIResponse(msg.content).action_type }}</el-tag>
+                  </div>
+
+                  <div class="ai-fields" v-if="parseAIResponse(msg.content).mitre_tactic || parseAIResponse(msg.content).mitre_technique">
+                    <div v-if="parseAIResponse(msg.content).mitre_tactic" class="ai-field">
+                      <span class="ai-field-label">MITRE 战术:</span>
+                      <span>{{ parseAIResponse(msg.content).mitre_tactic }}</span>
+                    </div>
+                    <div v-if="parseAIResponse(msg.content).mitre_technique" class="ai-field">
+                      <span class="ai-field-label">MITRE 技术:</span>
+                      <span>{{ parseAIResponse(msg.content).mitre_technique }}</span>
+                    </div>
+                  </div>
+
+                  <div v-if="parseAIResponse(msg.content).rationale" class="ai-field">
+                    <span class="ai-field-label">依据:</span>
+                    <span>{{ parseAIResponse(msg.content).rationale }}</span>
+                  </div>
+
+                  <el-alert
+                    v-if="parseAIResponse(msg.content).recommendation"
+                    :title="'建议'"
+                    type="success"
+                    :description="parseAIResponse(msg.content).recommendation"
+                    :closable="false"
+                    show-icon
+                    style="margin-top: 8px"
+                  />
+                </div>
+              </template>
+              <!-- Plain text / markdown response -->
+              <div v-else v-html="renderMarkdown(msg.content)"></div>
+            </template>
             <span v-else>{{ msg.content }}</span>
           </div>
         </div>
@@ -101,6 +154,28 @@ function renderMarkdown(text) {
   } catch {
     return text
   }
+}
+
+function parseAIResponse(content) {
+  if (!content || typeof content !== 'string') return null
+  try {
+    const parsed = JSON.parse(content)
+    if (parsed && typeof parsed === 'object' && (parsed.analysis || parsed.recommendation || parsed.risk_level)) {
+      return parsed
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+function riskTagType(level) {
+  if (!level) return 'info'
+  const l = level.toLowerCase()
+  if (l === 'high' || l === '高') return 'danger'
+  if (l === 'medium' || l === '中') return 'warning'
+  if (l === 'low' || l === '低') return 'success'
+  return 'info'
 }
 
 function newConversation() {
@@ -216,5 +291,42 @@ async function handleSend() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ai-structured {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-analysis {
+  line-height: 1.6;
+}
+
+.ai-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ai-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.ai-field {
+  font-size: 13px;
+  color: #606266;
+}
+
+.ai-field-label {
+  font-weight: 600;
+  color: #303133;
+  margin-right: 6px;
 }
 </style>

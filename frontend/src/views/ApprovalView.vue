@@ -113,7 +113,7 @@ async function fetchApprovals() {
   try {
     const params = activeTab.value === 'pending' ? { status: 'pending' } : {}
     const res = await getApprovals(params)
-    approvals.value = res.items || []
+    approvals.value = res.approvals || []
   } catch (err) {
     console.error('Failed to fetch approvals:', err)
   } finally {

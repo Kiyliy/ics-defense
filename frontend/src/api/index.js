@@ -27,8 +27,8 @@ import axios from 'axios'
  *   severity?: string
  *   source?: string
  *   status?: string
- *   page?: number
  *   limit?: number
+ *   offset?: number
  * }} AlertQueryParams
  */
 
@@ -134,11 +134,13 @@ export const getApprovals = (params) => unwrap(http.get('/approval', { params })
  * @param {string} reason
  */
 export const respondApproval = (id, status, reason) =>
-  unwrap(http.post(`/approval/${id}/respond`, { status, reason }))
+  unwrap(http.patch(`/approval/${id}`, { status, reason }))
 
 // Audit
 /** @param {Record<string, string | number>} params */
 export const getAuditLogs = (params) => unwrap(http.get('/audit', { params }))
-export const getAuditStats = () => unwrap(http.get('/audit/stats'))
+
+/** @param {Record<string, string | number>} [params] */
+export const getAuditStats = (params = {}) => unwrap(http.get('/audit/stats', { params }))
 
 export default http

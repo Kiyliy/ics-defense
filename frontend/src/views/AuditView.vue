@@ -43,7 +43,7 @@
       <el-col :span="8">
         <el-card shadow="hover" class="stat-mini">
           <div class="stat-mini-label">总 Token 消耗</div>
-          <div class="stat-mini-value">{{ auditStats.total_tokens || 0 }}</div>
+          <div class="stat-mini-value">{{ (auditStats.total_input_tokens || 0) + (auditStats.total_output_tokens || 0) }}</div>
         </el-card>
       </el-col>
       <el-col :span="8">
@@ -178,7 +178,7 @@ async function fetchLogs() {
 
 async function fetchStats() {
   try {
-    auditStats.value = await getAuditStats()
+    auditStats.value = await getAuditStats({ days: filters.value.days })
   } catch (err) {
     console.error('Failed to fetch audit stats:', err)
   }
@@ -187,6 +187,7 @@ async function fetchStats() {
 function handleReset() {
   filters.value = { trace_id: '', days: 7 }
   fetchLogs()
+  fetchStats()
 }
 
 onMounted(() => {
