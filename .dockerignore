@@ -1,0 +1,15 @@
+node_modules
+__pycache__
+*.pyc
+.git
+.env
+*.db
+*.db-wal
+*.db-shm
+.pytest_cache
+dist
+frontend/node_modules
+backend/node_modules
+.vite
+coverage
+*.log

@@ -110,7 +110,7 @@ router.get('/:id', (/** @type {any} */ req, /** @type {any} */ res) => {
  */
 router.patch('/:id/status', (/** @type {any} */ req, /** @type {any} */ res) => {
   const { status } = req.body;
-  if (!['open', 'analyzing', 'resolved'].includes(status)) {
+  if (!['open', 'analyzing', 'analyzed', 'resolved'].includes(status)) {
     return res.status(400).json({ error: 'Invalid status' });
   }
   const result = req.db.prepare('UPDATE alerts SET status = ? WHERE id = ?').run(status, req.params.id);

@@ -87,12 +87,31 @@ const ANALYSIS_RESPONSE_SCHEMA = /** @type {const} */ ({
  * @returns {Promise<LLMAnalysis>}
  */
 export async function analyzeAlerts(alerts) {
+  return createLLMService().analyzeAlerts(alerts);
+}
+
+/**
+ * @param {ChatCompletionMessageParam[]} messages
+ * @returns {Promise<string>}
+ */
+export async function chat(messages) {
+  return createLLMService().chat(messages);
+}
+
+/**
+ * @param {{ client?: Pick<OpenAI, 'chat'>, model?: string }} [options]
+ */
+export function createLLMService({ client: injectedClient = client, model = MODEL } = {}) {
+  return {
+    /** @param {unknown[]} alerts */
+    async analyzeAlerts(alerts) {
   const userMessage = `请分析以下安全告警并给出攻击链推断和处置建议：
+
 
 ${JSON.stringify(alerts, null, 2)}`;
 
-  const response = await client.chat.completions.create({
-    model: MODEL,
+      const response = await injectedClient.chat.completions.create({
+    model,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: userMessage },
@@ -101,51 +120,46 @@ ${JSON.stringify(alerts, null, 2)}`;
     response_format: ANALYSIS_RESPONSE_SCHEMA,
   });
 
-  const content = response.choices[0]?.message?.content;
-  if (typeof content !== 'string') {
-    return {
-      analysis: '',
-      mitre_tactic: 'Unknown',
-      mitre_technique: 'Unknown',
-      risk_level: 'unknown',
-      confidence: 0,
-      recommendation: '',
-      action_type: 'manual_review',
-      rationale: 'LLM returned empty content',
-    };
-  }
+      const content = response.choices[0]?.message?.content;
+      if (typeof content !== 'string') {
+        return {
+          analysis: '',
+          mitre_tactic: 'Unknown',
+          mitre_technique: 'Unknown',
+          risk_level: 'unknown',
+          confidence: 0,
+          recommendation: '',
+          action_type: 'manual_review',
+          rationale: 'LLM returned empty content',
+        };
+      }
 
-  try {
-    return /** @type {LLMAnalysis} */ (JSON.parse(content));
-  } catch {
-    return {
-      analysis: content,
-      mitre_tactic: 'Unknown',
-      mitre_technique: 'Unknown',
-      risk_level: 'unknown',
-      confidence: 0,
-      recommendation: '',
-      action_type: 'manual_review',
-      rationale: 'Failed to parse JSON response',
-    };
-  }
-}
-
-/**
- * 自由对话：用于指挥面板的 AI 问答
- */
-/**
- * @param {ChatCompletionMessageParam[]} messages
- * @returns {Promise<string>}
- */
-export async function chat(messages) {
-  const response = await client.chat.completions.create({
-    model: MODEL,
-    messages: [
-      /** @type {ChatCompletionMessageParam} */ ({ role: 'system', content: SYSTEM_PROMPT }),
-      ...messages,
-    ],
-    temperature: 0.5,
-  });
-  return response.choices[0]?.message?.content ?? '';
+      try {
+        return /** @type {LLMAnalysis} */ (JSON.parse(content));
+      } catch {
+        return {
+          analysis: content,
+          mitre_tactic: 'Unknown',
+          mitre_technique: 'Unknown',
+          risk_level: 'unknown',
+          confidence: 0,
+          recommendation: '',
+          action_type: 'manual_review',
+          rationale: 'Failed to parse JSON response',
+        };
+      }
+    },
+    /** @param {ChatCompletionMessageParam[]} messages */
+    async chat(messages) {
+      const response = await injectedClient.chat.completions.create({
+        model,
+        messages: [
+          /** @type {ChatCompletionMessageParam} */ ({ role: 'system', content: SYSTEM_PROMPT }),
+          ...messages,
+        ],
+        temperature: 0.5,
+      });
+      return response.choices[0]?.message?.content ?? '';
+    },
+  };
 }

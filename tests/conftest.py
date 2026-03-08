@@ -80,6 +80,16 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at  TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS analysis_tasks (
+    trace_id     TEXT PRIMARY KEY,
+    status       TEXT DEFAULT 'started',
+    alert_ids    TEXT,
+    result       TEXT,
+    error        TEXT,
+    started_at   TEXT DEFAULT (datetime('now')),
+    completed_at TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status);
 CREATE INDEX IF NOT EXISTS idx_alerts_severity ON alerts(severity);
 CREATE INDEX IF NOT EXISTS idx_alerts_created ON alerts(created_at);

@@ -27,6 +27,11 @@ COPY collector/ ./collector/
 # 创建数据目录（SQLite 数据库存放位置）
 RUN mkdir -p /app/data
 
+# 创建非 root 用户并赋予数据目录写权限
+RUN adduser --disabled-password --gecos '' appuser && \
+    chown -R appuser:appuser /app/data
+USER appuser
+
 # 暴露 FastAPI 服务端口
 EXPOSE 8000
 

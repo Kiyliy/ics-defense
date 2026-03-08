@@ -109,7 +109,7 @@ async function analyzeWithLLM(db, alerts, alertIds, { analyzeAlertsFn = analyzeA
 
 /**
  * POST /api/analysis/alerts
- * AI 分析告警：优先调用 Python Agent Service，失败时 fallback 到直接 LLM 调用
+ * AI 分析告警：委托 Python Agent Service 进行分析，不可用时返回 503
  *
  * Body: { alert_ids: [1, 2, 3] }
  */
@@ -157,16 +157,9 @@ export function createAnalysisRouter({
         message: 'Analysis delegated to Agent Service',
       });
     } catch (agentErr) {
-      console.warn('Agent Service unavailable, falling back to direct LLM:', getErrorMessage(agentErr));
-    }
-
-    try {
-      const result = await analyzeWithLLM(db, alerts, alert_ids, { analyzeAlertsFn });
-      res.json(result);
-    } catch (err) {
-      const message = getErrorMessage(err);
-      console.error('LLM analysis failed:', message);
-      res.status(500).json({ error: 'AI analysis failed', detail: message });
+      const message = getErrorMessage(agentErr);
+      console.error('Agent Service unavailable:', message);
+      res.status(503).json({ error: 'Agent Service unavailable', detail: message });
     }
   });
 
@@ -255,10 +248,29 @@ export function createAnalysisRouter({
     if (!['accepted', 'rejected'].includes(status)) {
       return res.status(400).json({ error: 'status must be accepted or rejected' });
     }
-    const result = req.db.prepare('UPDATE decisions SET status = ? WHERE id = ?').run(status, req.params.id);
+    const db = req.db;
+    const result = db.prepare('UPDATE decisions SET status = ? WHERE id = ?').run(status, req.params.id);
     if (result.changes === 0) {
       return res.status(404).json({ error: 'Decision not found' });
     }
+
+    // When a decision is accepted, resolve all related alerts
+    if (status === 'accepted') {
+      const decision = db.prepare('SELECT attack_chain_id FROM decisions WHERE id = ?').get(req.params.id);
+      if (decision) {
+        const chain = db.prepare('SELECT alert_ids FROM attack_chains WHERE id = ?').get(decision.attack_chain_id);
+        if (chain && chain.alert_ids) {
+          try {
+            const alertIds = JSON.parse(chain.alert_ids);
+            const updateAlert = db.prepare('UPDATE alerts SET status = ? WHERE id = ?');
+            for (const alertId of alertIds) {
+              updateAlert.run('resolved', alertId);
+            }
+          } catch { /* ignore malformed alert_ids */ }
+        }
+      }
+    }
+
     res.json({ updated: true });
   });
 

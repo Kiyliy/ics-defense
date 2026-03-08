@@ -23,6 +23,11 @@ COPY backend/src/ ./src/
 # 创建数据目录
 RUN mkdir -p /app/data
 
+# 创建非 root 用户并赋予数据目录写权限
+RUN adduser --disabled-password --gecos '' appuser && \
+    chown -R appuser:appuser /app/data
+USER appuser
+
 # 暴露后端端口
 EXPOSE 3000
 

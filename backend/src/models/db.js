@@ -42,7 +42,7 @@ const SCHEMA = `
     mitre_tactic  TEXT,                    -- MITRE ATT&CK 战术
     mitre_technique TEXT,                  -- MITRE ATT&CK 技术 ID
     asset_id      INTEGER REFERENCES assets(id),
-    status        TEXT DEFAULT 'open',     -- open / analyzing / resolved
+    status        TEXT DEFAULT 'open',     -- lifecycle: open → analyzing → analyzed → resolved
     raw_event_id  INTEGER REFERENCES raw_events(id),
     created_at    TEXT DEFAULT (datetime('now'))
   );

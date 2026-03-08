@@ -101,6 +101,7 @@ class StatusResponse(BaseModel):
 async def startup() -> None:
     """启动时初始化 MCP 客户端"""
     global _mcp_client
+    _ensure_tasks_table(DB_PATH)
     try:
         _mcp_client = create_client_from_config(MCP_CONFIG_PATH)
         await _mcp_client.connect_all()
@@ -163,6 +164,54 @@ def _get_db_connection() -> sqlite3.Connection:
     return conn
 
 
+def _ensure_tasks_table(db_path: str) -> None:
+    """确保 analysis_tasks 表存在"""
+    conn = sqlite3.connect(db_path)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS analysis_tasks (
+            trace_id     TEXT PRIMARY KEY,
+            status       TEXT DEFAULT 'started',
+            alert_ids    TEXT,
+            result       TEXT,
+            error        TEXT,
+            started_at   TEXT DEFAULT (datetime('now')),
+            completed_at TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def _update_task_in_db(trace_id: str, status: str, result: str | None = None, error: str | None = None) -> None:
+    """更新 analysis_tasks 表中的任务状态"""
+    conn = _get_db_connection()
+    try:
+        completed_at = datetime.now().isoformat() if status in ("completed", "error") else None
+        conn.execute(
+            """
+            UPDATE analysis_tasks
+            SET status = ?, result = ?, error = ?, completed_at = ?
+            WHERE trace_id = ?
+            """,
+            (status, result, error, completed_at, trace_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _get_task_from_db(trace_id: str) -> dict | None:
+    """从 analysis_tasks 表查询任务状态"""
+    conn = _get_db_connection()
+    try:
+        row = conn.execute(
+            "SELECT * FROM analysis_tasks WHERE trace_id = ?", (trace_id,)
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
 def _fetch_alerts_by_ids(alert_ids: list[int]) -> list[dict]:
     """根据 ID 列表查询告警数据"""
     if not alert_ids:
@@ -219,6 +268,7 @@ async def _run_analysis(trace_id: str, clustered_alerts: list[dict], model: str)
     """后台运行 Agent 分析任务"""
     try:
         _running_tasks[trace_id]["status"] = "running"
+        _update_task_in_db(trace_id, status="running")
         result = await agent_loop(
             clustered_alerts,
             mcp_client=_mcp_client,
@@ -229,10 +279,12 @@ async def _run_analysis(trace_id: str, clustered_alerts: list[dict], model: str)
         _persist_analysis_result(trace_id, _running_tasks[trace_id].get("alert_ids", []), result)
         _running_tasks[trace_id]["status"] = "completed"
         _running_tasks[trace_id]["result"] = result
+        _update_task_in_db(trace_id, status="completed", result=json.dumps(result, ensure_ascii=False))
     except Exception as exc:
         logger.exception("分析任务异常: trace_id=%s", trace_id)
         _running_tasks[trace_id]["status"] = "error"
         _running_tasks[trace_id]["error"] = str(exc)
+        _update_task_in_db(trace_id, status="error", error=str(exc))
 
 
 def _persist_analysis_result(trace_id: str, alert_ids: list[int], result: dict) -> None:
@@ -315,14 +367,26 @@ async def analyze(request: AnalyzeRequest):
     loop = asyncio.get_event_loop()
     task = loop.create_task(_run_analysis(trace_id, clustered, request.model))
 
+    started_at = datetime.now().isoformat()
     _running_tasks[trace_id] = {
         "task": task,
         "status": "started",
         "result": None,
         "error": None,
-        "started_at": datetime.now().isoformat(),
+        "started_at": started_at,
         "alert_ids": request.alert_ids,
     }
+
+    # Persist to DB so state survives restarts
+    conn = _get_db_connection()
+    try:
+        conn.execute(
+            "INSERT INTO analysis_tasks (trace_id, status, alert_ids, started_at) VALUES (?, ?, ?, ?)",
+            (trace_id, "started", json.dumps(request.alert_ids), started_at),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
     return AnalyzeResponse(
         trace_id=trace_id,
@@ -353,6 +417,23 @@ async def get_analysis(trace_id: str):
             "error": task_info.get("error"),
             "started_at": task_info.get("started_at"),
             "alert_ids": task_info.get("alert_ids"),
+            "audit_logs": logs,
+            "token_usage": total_tokens,
+        }
+
+    # Fall back to DB for tasks from previous service runs
+    db_task = _get_task_from_db(trace_id)
+    if db_task:
+        alert_ids = json.loads(db_task["alert_ids"]) if db_task["alert_ids"] else []
+        result = json.loads(db_task["result"]) if db_task["result"] else None
+        return {
+            "trace_id": trace_id,
+            "status": db_task["status"],
+            "result": result,
+            "error": db_task["error"],
+            "started_at": db_task["started_at"],
+            "completed_at": db_task["completed_at"],
+            "alert_ids": alert_ids,
             "audit_logs": logs,
             "token_usage": total_tokens,
         }
