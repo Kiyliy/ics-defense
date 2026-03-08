@@ -85,6 +85,50 @@ test('analysis alerts rejects partial missing ids', async () => {
   });
 });
 
+test('analysis agent status proxies backend request', async () => {
+  const mockFetch = async (url, options) => {
+    assert.match(String(url), /\/status$/);
+    assert.equal(options.method, 'GET');
+    assert.deepEqual(options.headers, { Accept: 'application/json' });
+    return {
+      ok: true,
+      async json() {
+        return { status: 'ok', mcp_connected: true, mcp_servers: ['memory'], running_tasks: 2 };
+      },
+    };
+  };
+
+  await withTestServer(async ({ baseUrl }) => {
+    const response = await fetch(`${baseUrl}/api/analysis/agent/status`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      status: 'ok',
+      mcp_connected: true,
+      mcp_servers: ['memory'],
+      running_tasks: 2,
+    });
+  }, createAnalysisRouter({ fetchFn: mockFetch }));
+});
+
+test('analysis agent status returns 503 when upstream agent is unavailable', async () => {
+  const mockFetch = async () => ({
+    ok: false,
+    status: 503,
+    async text() {
+      return 'agent down';
+    },
+  });
+
+  await withTestServer(async ({ baseUrl }) => {
+    const response = await fetch(`${baseUrl}/api/analysis/agent/status`);
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), {
+      error: 'Agent status unavailable',
+      detail: 'Agent Service returned 503: agent down',
+    });
+  }, createAnalysisRouter({ fetchFn: mockFetch }));
+});
+
 test('analysis alerts delegates to agent service and updates alert statuses', async () => {
   const mockFetch = async (url, options) => {
     assert.match(String(url), /\/analyze$/);

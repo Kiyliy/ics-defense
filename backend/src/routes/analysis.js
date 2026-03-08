@@ -60,6 +60,24 @@ async function callAgentService(alertIds, { fetchFn = fetch, agentServiceUrl = A
 }
 
 /**
+ * 获取 Python Agent Service 状态
+ * @param {{ fetchFn?: typeof fetch, agentServiceUrl?: string }} [options]
+ * @returns {Promise<any>}
+ */
+async function getAgentServiceStatus({ fetchFn = fetch, agentServiceUrl = AGENT_SERVICE_URL } = {}) {
+  const resp = await fetchFn(`${agentServiceUrl}/status`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  });
+
+  if (!resp.ok) {
+    throw new Error(`Agent Service returned ${resp.status}: ${await resp.text()}`);
+  }
+
+  return resp.json();
+}
+
+/**
  * 直接调用 LLM 分析（fallback）
  * @param {any} db
  * @param {unknown[]} alerts
@@ -120,6 +138,17 @@ export function createAnalysisRouter({
   agentServiceUrl = AGENT_SERVICE_URL,
 } = {}) {
   const router = Router();
+
+  router.get('/agent/status', async (_req, res) => {
+    try {
+      const status = await getAgentServiceStatus({ fetchFn, agentServiceUrl });
+      return res.json(status);
+    } catch (agentErr) {
+      const message = getErrorMessage(agentErr);
+      console.error('Agent status unavailable:', message);
+      return res.status(503).json({ error: 'Agent status unavailable', detail: message });
+    }
+  });
 
   router.post('/alerts', async (/** @type {any} */ req, /** @type {any} */ res) => {
     const { alert_ids } = req.body;
