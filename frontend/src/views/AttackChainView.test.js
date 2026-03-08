@@ -28,14 +28,14 @@ describe('AttackChainView', () => {
   })
 
   it('loads chain data on mount', async () => {
-const wrapper = mount(AttackChainView, withUiGlobal())
+    const wrapper = mount(AttackChainView, withUiGlobal())
     await flushPromises()
     expect(apiMocks.getAttackChains).toHaveBeenCalled()
     expect(wrapper.text()).toContain('攻击链分析')
   })
 
   it('updates decision and refreshes list', async () => {
-const wrapper = mount(AttackChainView, withUiGlobal())
+    const wrapper = mount(AttackChainView, withUiGlobal())
     await flushPromises()
 
     await wrapper.vm.handleDecision(9, 'accepted')
@@ -48,7 +48,7 @@ const wrapper = mount(AttackChainView, withUiGlobal())
   it('shows error message when decision update fails', async () => {
     apiMocks.updateDecision.mockRejectedValueOnce(new Error('update failed'))
 
-const wrapper = mount(AttackChainView, withUiGlobal())
+    const wrapper = mount(AttackChainView, withUiGlobal())
     await flushPromises()
 
     await wrapper.vm.handleDecision(9, 'accepted')

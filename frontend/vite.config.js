@@ -31,7 +31,13 @@ export default defineConfig({
           if (!id.includes('node_modules')) return
           if (id.includes('echarts')) return 'echarts'
           if (id.includes('@element-plus/icons-vue')) return 'element-plus-icons'
-          if (id.includes('element-plus')) return 'element-plus'
+          if (id.includes('element-plus/es/components/table')) return 'ep-table'
+          if (id.includes('element-plus/es/components/form')) return 'ep-form'
+          if (id.includes('element-plus/es/components/select')) return 'ep-select'
+          if (id.includes('element-plus/es/components/dialog')) return 'ep-dialog'
+          if (id.includes('element-plus/es/components/menu')) return 'ep-menu'
+          if (id.includes('element-plus/es/components/input')) return 'ep-input'
+          if (id.includes('element-plus')) return 'element-plus-core'
           if (id.includes('vue') || id.includes('pinia') || id.includes('vue-router')) {
             return 'vue-vendor'
           }

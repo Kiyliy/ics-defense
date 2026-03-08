@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { withUiGlobal } from '../test-utils/ui.js'
 
 const apiMocks = vi.hoisted(() => ({
   getDashboardStats: vi.fn(),
@@ -23,16 +24,7 @@ vi.mock('echarts/renderers', () => ({ CanvasRenderer: {} }))
 import DashboardView from './DashboardView.vue'
 
 describe('DashboardView', () => {
-  const passthroughStubs = {
-    StatCard: { template: '<div><slot /></div>' },
-    'el-row': { template: '<div><slot /></div>' },
-    'el-col': { template: '<div><slot /></div>' },
-    'el-card': { template: '<section><slot name="header" /><slot /></section>' },
-    'el-button': { template: '<button><slot /></button>' },
-    'el-table': { template: '<div><slot /></div>' },
-    'el-table-column': { template: '<div />' },
-    'el-tag': { template: '<span><slot /></span>' },
-  }
+
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -45,12 +37,12 @@ describe('DashboardView', () => {
   })
 
   it('loads stats, trend, and recent alerts then renders chart', async () => {
-    const wrapper = mount(DashboardView, {
+    const wrapper = mount(DashboardView, withUiGlobal({
       global: {
-        stubs: passthroughStubs,
+        stubs: { StatCard: { template: '<div><slot /></div>' } },
         mocks: { $router: { push: vi.fn() } },
       },
-    })
+    }))
 
     await flushPromises()
 
@@ -64,9 +56,9 @@ describe('DashboardView', () => {
     apiMocks.getDashboardStats.mockRejectedValueOnce(new Error('dashboard failed'))
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-    mount(DashboardView, {
-      global: { stubs: passthroughStubs },
-    })
+    mount(DashboardView, withUiGlobal({
+      global: { stubs: { StatCard: { template: '<div><slot /></div>' } } },
+    }))
     await flushPromises()
 
     expect(errorSpy).toHaveBeenCalled()
@@ -83,11 +75,9 @@ describe('DashboardView', () => {
       ],
     })
 
-    mount(DashboardView, {
-      global: {
-        stubs: passthroughStubs,
-      },
-    })
+    mount(DashboardView, withUiGlobal({
+      global: { stubs: { StatCard: { template: '<div><slot /></div>' } } },
+    }))
     await flushPromises()
 
     expect(apiMocks.getDashboardStats).toHaveBeenCalledTimes(1)

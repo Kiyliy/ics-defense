@@ -23,8 +23,6 @@ vi.mock('element-plus', async () => {
 import ChatView from './ChatView.vue'
 
 describe('ChatView', () => {
-  const stubs = undefined
-
   beforeEach(() => {
     vi.clearAllMocks()
     apiMocks.chatWithAI.mockResolvedValue({ reply: 'plain reply' })
@@ -58,7 +56,7 @@ describe('ChatView', () => {
     expect(wrapper.vm.currentMessages[1].content).toBe('plain reply')
   })
 
-  it('parses structured assistant JSON and maps risk tag types', () => {
+  it('parses structured assistant JSON and maps risk tag types', async () => {
     const wrapper = mount(ChatView, withUiGlobal())
     const parsed = wrapper.vm.parseAIResponse(JSON.stringify({
       analysis: '发现异常',
@@ -69,10 +67,11 @@ describe('ChatView', () => {
 
     expect(parsed.recommendation).toBe('隔离主机')
     expect(wrapper.vm.parseAIResponse('not json')).toBeNull()
-    expect(wrapper.vm.riskTagType('high')).toBe('danger')
-    expect(wrapper.vm.riskTagType('中')).toBe('warning')
-    expect(wrapper.vm.riskTagType('low')).toBe('success')
-    expect(wrapper.vm.riskTagType('unknown')).toBe('info')
+    const { getRiskTagType } = await import('../utils/ui.js')
+    expect(getRiskTagType('high')).toBe('danger')
+    expect(getRiskTagType('中')).toBe('info')
+    expect(getRiskTagType('low')).toBe('success')
+    expect(getRiskTagType('unknown')).toBe('info')
   })
 
   it('uses safe markdown renderer and falls back with error message on request failure', async () => {

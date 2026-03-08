@@ -39,7 +39,7 @@ describe('AlertListView', () => {
   })
 
   it('loads alerts on mount and resets filters', async () => {
-const wrapper = mount(AlertListView, withUiGlobal())
+    const wrapper = mount(AlertListView, withUiGlobal())
     await flushPromises()
     expect(store.fetchAlerts).toHaveBeenCalled()
     wrapper.vm.handleReset()
@@ -48,7 +48,7 @@ const wrapper = mount(AlertListView, withUiGlobal())
 
   it('submits analysis, refreshes list, starts polling and routes to chains when trace_id exists', async () => {
     store.submitAnalysis.mockResolvedValueOnce({ trace_id: 'trace-1' })
-const wrapper = mount(AlertListView, withUiGlobal())
+    const wrapper = mount(AlertListView, withUiGlobal())
     await flushPromises()
 
     await wrapper.vm.handleAnalyze()
@@ -62,7 +62,7 @@ const wrapper = mount(AlertListView, withUiGlobal())
   it('routes to chains when direct analysis result returns attack_chain_id', async () => {
     store.submitAnalysis.mockResolvedValueOnce({ attack_chain_id: 88 })
 
-const wrapper = mount(AlertListView, withUiGlobal())
+    const wrapper = mount(AlertListView, withUiGlobal())
     await flushPromises()
 
     await wrapper.vm.handleAnalyze()
@@ -73,7 +73,7 @@ const wrapper = mount(AlertListView, withUiGlobal())
   it('shows error message when analysis submission fails', async () => {
     store.submitAnalysis.mockResolvedValueOnce(null)
 
-const wrapper = mount(AlertListView, withUiGlobal())
+    const wrapper = mount(AlertListView, withUiGlobal())
     await flushPromises()
 
     await wrapper.vm.handleAnalyze()
@@ -83,7 +83,7 @@ const wrapper = mount(AlertListView, withUiGlobal())
 
   it('shows warning when detail fetch fails', async () => {
     store.fetchAlertDetail.mockResolvedValueOnce(null)
-const wrapper = mount(AlertListView, withUiGlobal())
+    const wrapper = mount(AlertListView, withUiGlobal())
     await flushPromises()
 
     await wrapper.vm.showDetail({ id: 3, title: 'summary' })

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { withUiGlobal } from '../test-utils/ui.js'
 
 const apiMocks = vi.hoisted(() => ({
   getBackendHealth: vi.fn(),
@@ -29,26 +30,13 @@ vi.mock('vue-router', () => ({
 import AppLayout from './AppLayout.vue'
 
 describe('AppLayout', () => {
-  const passthroughStubs = {
-    'router-view': { template: '<div><slot /></div>' },
-    'el-container': { template: '<div><slot /></div>' },
-    'el-aside': { template: '<aside><slot /></aside>' },
-    'el-menu': { template: '<nav><slot /></nav>' },
-    'el-menu-item': { template: '<div><slot /><slot name="title" /></div>' },
-    'el-icon': { template: '<span><slot /></span>' },
-    'el-header': { template: '<header><slot /></header>' },
-    'el-main': { template: '<main><slot /></main>' },
-    'el-space': { template: '<div><slot /></div>' },
-    'el-tooltip': { template: '<div><slot /></div>' },
-    'el-tag': { template: '<span><slot /></span>' },
-    Warning: { template: '<i />' },
-    Fold: { template: '<i />' },
-    Expand: { template: '<i />' },
-  }
-
-  const mountLayout = () => mount(AppLayout, {
-    global: { stubs: passthroughStubs },
-  })
+  const mountLayout = () => mount(AppLayout, withUiGlobal({
+    global: {
+      stubs: {
+        'router-view': { template: '<div><slot /></div>' },
+      },
+    },
+  }))
 
   beforeEach(() => {
     vi.clearAllMocks()
