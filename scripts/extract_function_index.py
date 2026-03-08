@@ -1,4 +1,25 @@
 #!/usr/bin/env python3
+"""
+函数摘要提取工具：为 AI 压缩项目代码上下文。
+
+用法示例：
+  1. 扫整个项目，输出紧凑 Markdown：
+     python3 scripts/extract_function_index.py . --skip-empty --skip-tests --format md --mode compact
+
+  2. 扫整个项目，输出 JSON：
+     python3 scripts/extract_function_index.py . --skip-empty --skip-tests --format json
+
+  3. 扫指定目录或文件：
+     python3 scripts/extract_function_index.py backend/src/routes frontend/src/views/ChatView.vue --skip-empty --format md
+
+  4. 输出到文件：
+     python3 scripts/extract_function_index.py . --skip-empty --skip-tests --format md --output function_index.md
+
+参数说明：
+  --mode compact|full   compact 更省 token，full 保留 line/kind 等更多信息
+  --skip-tests          跳过 tests/test/__tests__ 目录和常见测试文件
+  --skip-empty          跳过没有函数的文件
+"""
 from __future__ import annotations
 
 import argparse
@@ -8,6 +29,20 @@ import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
+
+TEST_FILE_PATTERNS = (
+    'test_*.py',
+    '*_test.py',
+    '*.test.js',
+    '*.spec.js',
+    '*.test.ts',
+    '*.spec.ts',
+    '*.test.jsx',
+    '*.spec.jsx',
+    '*.test.tsx',
+    '*.spec.tsx',
+)
+TEST_PATH_PARTS = {'tests', 'test', '__tests__'}
 
 SUPPORTED_EXTENSIONS = {".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue"}
 DEFAULT_EXCLUDE_DIRS = {
@@ -100,13 +135,21 @@ def clean_comment_block(text: str) -> str:
     return "\n".join(lines).strip()
 
 
-def collect_files(targets: list[Path], include: set[str], exclude_dirs: set[str]) -> Iterable[Path]:
+def is_test_file(path: Path) -> bool:
+    if any(part in TEST_PATH_PARTS for part in path.parts):
+        return True
+    return any(path.match(pattern) for pattern in TEST_FILE_PATTERNS)
+
+
+def collect_files(targets: list[Path], include: set[str], exclude_dirs: set[str], skip_tests: bool = False) -> Iterable[Path]:
     seen: set[Path] = set()
     for target in targets:
         resolved = target.resolve()
         if resolved.is_file():
             if resolved.suffix.lower() in include and not any(part in exclude_dirs for part in resolved.parts):
                 if resolved not in seen:
+                    if skip_tests and is_test_file(resolved):
+                        continue
                     seen.add(resolved)
                     yield resolved
             continue
@@ -119,6 +162,8 @@ def collect_files(targets: list[Path], include: set[str], exclude_dirs: set[str]
             if any(part in exclude_dirs for part in path.parts):
                 continue
             if path in seen:
+                continue
+            if skip_tests and is_test_file(path):
                 continue
             seen.add(path)
             yield path
@@ -304,7 +349,7 @@ def summarize_js_file(path: Path, base_dir: Path) -> FileSummary:
     return summarize_js_like_source(path.read_text(encoding="utf-8"), str(path.relative_to(base_dir)), language)
 
 
-def to_markdown(items: list[FileSummary]) -> str:
+def to_markdown(items: list[FileSummary], mode: str = 'compact') -> str:
     lines: list[str] = []
     for item in items:
         if not item.functions:
@@ -313,10 +358,17 @@ def to_markdown(items: list[FileSummary]) -> str:
         for func in item.functions:
             lines.append("")
             lines.append(f"- {func.signature}")
+            if mode == 'full':
+                lines.append(f"  line: {func.line}")
+                lines.append(f"  kind: {func.kind}")
             if func.comment:
                 lines.append(f"  comment: {func.comment}")
+            elif mode == 'full':
+                lines.append("  comment: (none)")
             if func.returns:
                 lines.append(f"  returns: {', '.join(func.returns)}")
+            elif mode == 'full':
+                lines.append("  returns: (none)")
         lines.append("")
     return "\n".join(lines).strip() + "\n"
 
@@ -325,10 +377,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="提取项目中每个函数的签名、注释和返回值，用于 AI 上下文压缩。")
     parser.add_argument("targets", nargs="*", default=["."], help="要扫描的文件或目录，默认当前目录")
     parser.add_argument("--format", choices=["json", "md"], default="json", help="输出格式")
+    parser.add_argument("--mode", choices=["compact", "full"], default="compact", help="输出模式：compact 更省 token，full 保留更多字段")
     parser.add_argument("--output", help="输出文件路径；不传则打印到 stdout")
     parser.add_argument("--extensions", nargs="*", default=sorted(SUPPORTED_EXTENSIONS), help="要扫描的扩展名列表")
     parser.add_argument("--exclude-dir", action="append", default=[], help="额外排除的目录名，可重复传入")
     parser.add_argument("--skip-empty", action="store_true", help="跳过没有函数的文件")
+    parser.add_argument("--skip-tests", action="store_true", help="跳过测试文件和 tests/test 目录")
     args = parser.parse_args()
 
     targets = [Path(item) for item in args.targets]
@@ -337,7 +391,7 @@ def main() -> int:
     exclude_dirs = DEFAULT_EXCLUDE_DIRS | set(args.exclude_dir)
 
     results: list[FileSummary] = []
-    for path in sorted(collect_files(targets, include, exclude_dirs), key=lambda item: str(item)):
+    for path in sorted(collect_files(targets, include, exclude_dirs, skip_tests=args.skip_tests), key=lambda item: str(item)):
         try:
             if path.suffix.lower() == ".py":
                 summary = summarize_python_file(path, display_root)
@@ -376,7 +430,7 @@ def main() -> int:
         ]
         output = json.dumps(payload, ensure_ascii=False, indent=2)
     else:
-        output = to_markdown(results)
+        output = to_markdown(results, mode=args.mode)
 
     if args.output:
         Path(args.output).write_text(output + ("" if output.endswith("\n") else "\n"), encoding="utf-8")
