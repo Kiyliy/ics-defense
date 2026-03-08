@@ -49,7 +49,7 @@
       <el-col :span="8">
         <el-card shadow="hover" class="stat-mini">
           <div class="stat-mini-label">日志条数</div>
-          <div class="stat-mini-value">{{ groupedLogs.length }}</div>
+          <div class="stat-mini-value">{{ totalLogCount }}</div>
         </el-card>
       </el-col>
     </el-row>
@@ -140,6 +140,8 @@ const groupedLogs = computed(() => {
   }
   return Object.values(map).sort((a, b) => (b.earliest > a.earliest ? 1 : -1))
 })
+
+const totalLogCount = computed(() => logs.value.length)
 
 function eventTypeColor(type) {
   const map = {

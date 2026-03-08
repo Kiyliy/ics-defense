@@ -2,7 +2,8 @@
 
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { getAlerts, getAlertDetail, analyzeAlerts } from '../api/index.js'
+import { ElMessage } from 'element-plus'
+import { getAlerts, getAlertDetail, analyzeAlerts, getAuditLogs } from '../api/index.js'
 
 /** @typedef {import('../api/index.js').AlertRecord} AlertRecord */
 /** @typedef {import('../api/index.js').AlertsResponse} AlertsResponse */
@@ -91,6 +92,38 @@ export const useAlertStore = defineStore('alert', () => {
     }
   }
 
+  /**
+   * Poll for analysis result completion.
+   * @param {string} traceId
+   * @returns {Promise<Record<string, unknown> | null>}
+   */
+  async function pollAnalysisResult(traceId) {
+    const maxWait = 60000
+    const interval = 5000
+    const start = Date.now()
+
+    ElMessage.info('正在等待分析完成...')
+
+    while (Date.now() - start < maxWait) {
+      await new Promise((resolve) => setTimeout(resolve, interval))
+      try {
+        const res = await getAuditLogs({ trace_id: traceId })
+        const logs = res.logs || []
+        const finished = logs.find(
+          (/** @type {Record<string, unknown>} */ log) => log.event_type === 'analysis_finished'
+        )
+        if (finished) {
+          return finished.data && typeof finished.data === 'object' ? finished.data : finished
+        }
+      } catch (err) {
+        console.error('Poll error:', getErrorMessage(err))
+      }
+    }
+
+    ElMessage.warning('分析轮询超时，请前往审计页面查看结果')
+    return null
+  }
+
   /** @param {Partial<AlertFilters>} newFilters */
   function setFilters(newFilters) {
     Object.assign(filters.value, newFilters)
@@ -111,6 +144,7 @@ export const useAlertStore = defineStore('alert', () => {
     fetchAlerts,
     fetchAlertDetail,
     submitAnalysis,
+    pollAnalysisResult,
     setFilters,
     toggleSelection,
   }

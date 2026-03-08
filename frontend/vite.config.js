@@ -10,13 +10,20 @@ const backendTarget = process.env.VITE_API_TARGET || 'http://localhost:3002'
 export default defineConfig({
   plugins: [
     vue(),
-    AutoImport({
-      resolvers: [ElementPlusResolver()],
-    }),
-    Components({
-      resolvers: [ElementPlusResolver({ importStyle: 'css' })],
-    }),
+    ...(process.env.VITEST
+      ? []
+      : [
+          AutoImport({
+            resolvers: [ElementPlusResolver()],
+          }),
+          Components({
+            resolvers: [ElementPlusResolver({ importStyle: 'css' })],
+          }),
+        ]),
   ],
+  test: {
+    environment: 'jsdom',
+  },
   build: {
     rollupOptions: {
       output: {

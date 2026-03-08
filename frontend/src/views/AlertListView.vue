@@ -44,6 +44,7 @@
           >
             <el-option label="Open" value="open" />
             <el-option label="Analyzing" value="analyzing" />
+            <el-option label="Analyzed" value="analyzed" />
             <el-option label="Resolved" value="resolved" />
           </el-select>
         </el-form-item>
@@ -164,7 +165,7 @@ function severityType(severity) {
 }
 
 function statusType(status) {
-  const map = { open: 'danger', analyzing: 'warning', resolved: 'success' }
+  const map = { open: 'danger', analyzing: 'warning', analyzed: '', resolved: 'success' }
   return map[status] || 'info'
 }
 
@@ -188,7 +189,15 @@ async function handleAnalyze() {
     await store.fetchAlerts()
     if (res.trace_id) {
       ElMessage.success(`分析已提交，Trace ID: ${res.trace_id}`)
-      await router.push({ path: '/audit', query: { trace_id: res.trace_id, days: 7 } })
+      // Poll for analysis completion in background
+      store.pollAnalysisResult(res.trace_id).then((result) => {
+        if (result) {
+          const riskLevel = result.risk_level || result.risk || '未知'
+          ElMessage.success(`分析完成，风险等级: ${riskLevel}`)
+          store.fetchAlerts()
+        }
+      })
+      await router.push({ path: '/chains' })
     } else if (res.attack_chain_id) {
       ElMessage.success(`分析完成，攻击链 ID: ${res.attack_chain_id}`)
       await router.push('/chains')

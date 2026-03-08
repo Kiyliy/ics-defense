@@ -1,6 +1,7 @@
 // @ts-check
 
 import axios from 'axios'
+import { ElMessage } from 'element-plus'
 
 /**
  * @typedef {'low' | 'medium' | 'high' | 'critical' | 'unknown'} RiskLevel
@@ -88,6 +89,20 @@ http.interceptors.response.use(
   (res) => res.data,
   (err) => {
     console.error('API Error:', err)
+    if (err.response && err.response.status === 400) {
+      const data = err.response.data
+      let msg = '请求参数错误'
+      if (data && typeof data === 'object') {
+        if (data.detail) {
+          msg = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)
+        } else if (data.message) {
+          msg = data.message
+        }
+      } else if (typeof data === 'string') {
+        msg = data
+      }
+      ElMessage.error(msg)
+    }
     return Promise.reject(err)
   }
 )
