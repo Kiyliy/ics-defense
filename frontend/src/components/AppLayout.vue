@@ -43,7 +43,7 @@ const routeDescriptions = {
   '/chains': '串联证据、决策与攻击链上下文。',
   '/chat': '结合 AI 助手进行安全问答与推演。',
   '/approval': '对高风险工具调用与决策执行进行双人审批。',
-  '/audit': '回溯 trace、工具调用与模型行为链路。',
+  '/agent-logs': '回溯 trace、工具调用与模型行为链路。',
 }
 
 let healthTimer = null
