@@ -37,7 +37,18 @@
         </el-icon>
         <span class="header-title">工控安全指挥决策平台</span>
         <div class="header-right">
-          <el-tag type="success" size="small">系统运行中</el-tag>
+          <el-space size="small" alignment="center">
+            <el-tooltip :content="backendStatusText" placement="bottom">
+              <el-tag :type="statusTagType(systemHealth.backend)" size="small">
+                后端 {{ statusLabel(systemHealth.backend) }}
+              </el-tag>
+            </el-tooltip>
+            <el-tooltip :content="agentStatusText" placement="bottom">
+              <el-tag :type="statusTagType(systemHealth.agent)" size="small">
+                Agent {{ statusLabel(systemHealth.agent) }}
+              </el-tag>
+            </el-tooltip>
+          </el-space>
         </div>
       </el-header>
 
@@ -49,11 +60,20 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
+import { getAgentStatus, getBackendHealth } from '../api/index.js'
 
 const route = useRoute()
 const isCollapse = ref(false)
+const systemHealth = ref({
+  backend: 'checking',
+  agent: 'checking',
+  backendTimestamp: null,
+  agentDetails: null,
+})
+
+let healthTimer = null
 
 const activeMenu = computed(() => route.path)
 
@@ -65,6 +85,75 @@ const menuItems = [
   { path: '/approval', title: '审批队列', icon: 'Checked' },
   { path: '/audit', title: '审计日志', icon: 'Document' },
 ]
+
+const backendStatusText = computed(() => {
+  if (systemHealth.value.backend === 'healthy' && systemHealth.value.backendTimestamp) {
+    return `后端健康检查成功，时间：${systemHealth.value.backendTimestamp}`
+  }
+  if (systemHealth.value.backend === 'degraded') {
+    return '后端健康检查失败，请检查 Backend API 服务。'
+  }
+  return '正在检查后端状态...'
+})
+
+const agentStatusText = computed(() => {
+  if (systemHealth.value.agent === 'healthy') {
+    const details = systemHealth.value.agentDetails
+    const serverCount = details?.mcp_servers?.length ?? 0
+    return `Agent 可用，MCP 工具 ${serverCount} 个，运行中任务 ${details?.running_tasks ?? 0} 个`
+  }
+  if (systemHealth.value.agent === 'degraded') {
+    return 'Agent 状态不可用，可能是服务未启动、跨域不可访问，或接口异常。'
+  }
+  return '正在检查 Agent 状态...'
+})
+
+function statusTagType(status) {
+  if (status === 'healthy') return 'success'
+  if (status === 'degraded') return 'danger'
+  return 'info'
+}
+
+function statusLabel(status) {
+  if (status === 'healthy') return '正常'
+  if (status === 'degraded') return '异常'
+  return '检查中'
+}
+
+async function refreshHealth() {
+  const [backendResult, agentResult] = await Promise.allSettled([
+    getBackendHealth(),
+    getAgentStatus(),
+  ])
+
+  if (backendResult.status === 'fulfilled' && backendResult.value?.status === 'ok') {
+    systemHealth.value.backend = 'healthy'
+    systemHealth.value.backendTimestamp = backendResult.value.timestamp || null
+  } else {
+    systemHealth.value.backend = 'degraded'
+    systemHealth.value.backendTimestamp = null
+  }
+
+  if (agentResult.status === 'fulfilled' && agentResult.value?.status === 'ok') {
+    systemHealth.value.agent = 'healthy'
+    systemHealth.value.agentDetails = agentResult.value
+  } else {
+    systemHealth.value.agent = 'degraded'
+    systemHealth.value.agentDetails = null
+  }
+}
+
+onMounted(() => {
+  refreshHealth()
+  healthTimer = window.setInterval(refreshHealth, 30000)
+})
+
+onBeforeUnmount(() => {
+  if (healthTimer) {
+    window.clearInterval(healthTimer)
+    healthTimer = null
+  }
+})
 </script>
 
 <style scoped>

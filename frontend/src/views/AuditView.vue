@@ -109,12 +109,16 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { getAuditLogs, getAuditStats } from '../api'
+import { filterAuditLogsByDays } from '../api/view-models.js'
+
+const route = useRoute()
 
 const filters = ref({
-  trace_id: '',
-  days: 7,
+  trace_id: typeof route.query.trace_id === 'string' ? route.query.trace_id : '',
+  days: Number(route.query.days || 7),
 })
 
 const logs = ref([])
@@ -165,10 +169,10 @@ function formatData(data) {
 async function fetchLogs() {
   loading.value = true
   try {
-    const params = { days: filters.value.days }
+    const params = {}
     if (filters.value.trace_id) params.trace_id = filters.value.trace_id
     const res = await getAuditLogs(params)
-    logs.value = res.logs || []
+    logs.value = filterAuditLogsByDays(res.logs || [], filters.value.days)
   } catch (err) {
     console.error('Failed to fetch audit logs:', err)
   } finally {
@@ -191,6 +195,13 @@ function handleReset() {
 }
 
 onMounted(() => {
+  fetchLogs()
+  fetchStats()
+})
+
+watch(() => route.query, (query) => {
+  filters.value.trace_id = typeof query.trace_id === 'string' ? query.trace_id : ''
+  filters.value.days = Number(query.days || filters.value.days || 7)
   fetchLogs()
   fetchStats()
 })

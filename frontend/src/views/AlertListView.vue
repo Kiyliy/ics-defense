@@ -149,10 +149,12 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAlertStore } from '../stores/alert'
 
 const store = useAlertStore()
+const router = useRouter()
 const detailVisible = ref(false)
 const currentDetail = ref(null)
 
@@ -182,10 +184,14 @@ function handleSelectionChange(rows) {
 async function handleAnalyze() {
   const res = await store.submitAnalysis()
   if (res) {
+    store.toggleSelection([])
+    await store.fetchAlerts()
     if (res.trace_id) {
       ElMessage.success(`分析已提交，Trace ID: ${res.trace_id}`)
+      await router.push({ path: '/audit', query: { trace_id: res.trace_id, days: 7 } })
     } else if (res.attack_chain_id) {
       ElMessage.success(`分析完成，攻击链 ID: ${res.attack_chain_id}`)
+      await router.push('/chains')
     } else {
       ElMessage.success('分析请求已完成')
     }
@@ -198,12 +204,11 @@ async function showDetail(row) {
   detailVisible.value = true
   currentDetail.value = row
 
-  try {
-    await store.fetchAlertDetail(row.id)
-    if (store.currentAlert) {
-      currentDetail.value = store.currentAlert
-    }
-  } catch {
+  const detail = await store.fetchAlertDetail(row.id)
+  if (detail) {
+    currentDetail.value = detail
+  } else {
+    ElMessage.warning('告警详情加载失败，当前仅显示列表摘要信息')
   }
 }
 
