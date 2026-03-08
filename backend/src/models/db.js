@@ -110,6 +110,29 @@ const SCHEMA = `
 `;
 
 /**
+ * 默认业务配置（仅在首次初始化时写入，不覆盖已有值）
+ * @type {Array<{ key: string, value: string, description: string }>}
+ */
+const DEFAULT_CONFIG = [
+  // 速率限制 — 全局
+  { key: 'rate_limit.global.window_ms',   value: '900000',  description: '全局速率限制窗口（毫秒），默认 15 分钟' },
+  { key: 'rate_limit.global.max',         value: '500',     description: '全局速率限制窗口内最大请求数' },
+  // 速率限制 — LLM
+  { key: 'rate_limit.llm.window_ms',      value: '60000',   description: 'LLM 端点速率限制窗口（毫秒），默认 1 分钟' },
+  { key: 'rate_limit.llm.max',            value: '10',      description: 'LLM 端点窗口内最大请求数' },
+  // 速率限制 — 通知
+  { key: 'rate_limit.notify.window_ms',   value: '60000',   description: '通知端点速率限制窗口（毫秒），默认 1 分钟' },
+  { key: 'rate_limit.notify.max',         value: '20',      description: '通知端点窗口内最大请求数' },
+  // 事件接入
+  { key: 'ingest.max_batch_size',         value: '1000',    description: '单次 ingest 最大事件数' },
+  { key: 'ingest.valid_sources',          value: 'waf,nids,hids,pikachu,soc', description: '允许的事件来源（逗号分隔）' },
+  // 对话
+  { key: 'chat.max_messages',             value: '50',      description: 'chat 接口单次最大消息数' },
+  // 请求体
+  { key: 'request.body_limit',            value: '1mb',     description: '请求体大小上限' },
+];
+
+/**
  * @param {string} dbPath
  * @returns {any}
  */
@@ -119,5 +142,17 @@ export function initDB(dbPath) {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
+
+  // Seed default config (INSERT OR IGNORE — never overwrite existing values)
+  const upsert = db.prepare(
+    'INSERT OR IGNORE INTO system_config (key, value, description) VALUES (?, ?, ?)'
+  );
+  const seedAll = db.transaction(() => {
+    for (const row of DEFAULT_CONFIG) {
+      upsert.run(row.key, row.value, row.description);
+    }
+  });
+  seedAll();
+
   return db;
 }
