@@ -120,9 +120,9 @@ def test_approval_respond_updates_pending_record(client, service_db_path: str):
 
 
 def test_chat_maps_auth_error_to_401(client):
-    with patch('agent.service.OpenAI') as MockOpenAI:
+    with patch('agent.service.AsyncOpenAI') as MockOpenAI:
         mock_client = MagicMock()
-        mock_client.chat.completions.create.side_effect = Exception('401 unauthorized')
+        mock_client.chat.completions.create = AsyncMock(side_effect=Exception('401 unauthorized'))
         MockOpenAI.return_value = mock_client
 
         response = client.post('/chat', json={'messages': [{'role': 'user', 'content': 'hello'}], 'model': 'test-model'})

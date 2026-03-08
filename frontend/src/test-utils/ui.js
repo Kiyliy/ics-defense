@@ -20,7 +20,19 @@ export const elementPlusStubs = {
   'el-table': { template: '<div><slot /></div>' },
   'el-table-column': {
     props: ['label', 'prop', 'type'],
-    template: '<div><slot :row="{}" /><slot name="default" :row="{}" /></div>',
+    data() {
+      return {
+        rowFallback: {
+          data: '',
+          alerts: [],
+          decisions: [],
+          severity: '',
+          status: '',
+          risk_level: '',
+        },
+      }
+    },
+    template: '<div><slot :row="rowFallback" /><slot name="default" :row="rowFallback" /></div>',
   },
   'el-form': { template: '<form><slot /></form>' },
   'el-form-item': { template: '<div><slot /></div>' },
@@ -35,6 +47,11 @@ export const elementPlusStubs = {
   'el-icon': { template: '<span><slot /></span>' },
   'el-row': { template: '<div><slot /></div>' },
   'el-col': { template: '<div><slot /></div>' },
+  'el-tabs': { template: '<div><slot /></div>' },
+  'el-tab-pane': { template: '<div><slot /></div>' },
+  'el-popover': { template: '<div><slot /><slot name="reference" /></div>' },
+  'el-collapse': { template: '<div><slot /></div>' },
+  'el-collapse-item': { template: '<div><slot /><slot name="title" /></div>' },
   'el-empty': { template: '<div><slot /></div>' },
   'el-alert': { template: '<div><slot /></div>' },
   'el-input': {
