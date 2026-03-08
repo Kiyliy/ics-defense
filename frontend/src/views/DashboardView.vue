@@ -39,7 +39,7 @@
         <el-table-column prop="title" label="告警标题" min-width="200" show-overflow-tooltip />
         <el-table-column prop="severity" label="等级" width="100">
           <template #default="{ row }">
-            <el-tag :type="severityType(row.severity)" size="small">
+            <el-tag :type="getSeverityTagType(row.severity)" size="small">
               {{ row.severity }}
             </el-tag>
           </template>
@@ -61,6 +61,7 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
+import { getSeverityTagType } from '../utils/ui.js'
 import { use } from 'echarts/core'
 import { LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent } from 'echarts/components'
@@ -83,6 +84,7 @@ const trendData = ref([])
 const recentAlerts = ref([])
 const chartRef = ref(null)
 let chartInstance = null
+let resizeRaf = 0
 
 const statCards = computed(() => {
   const s = stats.value || {}
@@ -94,14 +96,11 @@ const statCards = computed(() => {
   ]
 })
 
-function severityType(severity) {
-  const map = { critical: 'danger', high: 'warning', medium: '', low: 'info' }
-  return map[severity] || 'info'
-}
-
 function renderChart() {
   if (!chartRef.value) return
-  chartInstance = init(chartRef.value)
+  if (!chartInstance) {
+    chartInstance = init(chartRef.value)
+  }
 
   const { labels, counts } = buildTrendSeries(trendData.value)
 
@@ -138,7 +137,9 @@ function renderChart() {
 }
 
 function handleResize() {
-  chartInstance?.resize()
+  if (!chartInstance) return
+  cancelAnimationFrame(resizeRaf)
+  resizeRaf = requestAnimationFrame(() => chartInstance?.resize())
 }
 
 onMounted(async () => {
@@ -174,7 +175,9 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  cancelAnimationFrame(resizeRaf)
   chartInstance?.dispose()
+  chartInstance = null
   window.removeEventListener('resize', handleResize)
 })
 </script>

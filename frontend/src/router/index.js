@@ -1,11 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AppLayout from '../components/AppLayout.vue'
-import DashboardView from '../views/DashboardView.vue'
-import AlertListView from '../views/AlertListView.vue'
-import AttackChainView from '../views/AttackChainView.vue'
-import ChatView from '../views/ChatView.vue'
-import ApprovalView from '../views/ApprovalView.vue'
-import AuditView from '../views/AuditView.vue'
 
 const routes = [
   {
@@ -16,37 +10,37 @@ const routes = [
       {
         path: 'dashboard',
         name: 'Dashboard',
-        component: DashboardView,
+        component: () => import('../views/DashboardView.vue'),
         meta: { title: '指挥面板', icon: 'Monitor' },
       },
       {
         path: 'alerts',
         name: 'Alerts',
-        component: AlertListView,
+        component: () => import('../views/AlertListView.vue'),
         meta: { title: '告警列表', icon: 'Bell' },
       },
       {
         path: 'chains',
         name: 'AttackChains',
-        component: AttackChainView,
+        component: () => import('../views/AttackChainView.vue'),
         meta: { title: '攻击链', icon: 'Connection' },
       },
       {
         path: 'chat',
         name: 'Chat',
-        component: ChatView,
+        component: () => import('../views/ChatView.vue'),
         meta: { title: 'AI 对话', icon: 'ChatDotRound' },
       },
       {
         path: 'approval',
         name: 'Approval',
-        component: ApprovalView,
+        component: () => import('../views/ApprovalView.vue'),
         meta: { title: '审批队列', icon: 'Checked' },
       },
       {
         path: 'audit',
         name: 'Audit',
-        component: AuditView,
+        component: () => import('../views/AuditView.vue'),
         meta: { title: '审计日志', icon: 'Document' },
       },
     ],

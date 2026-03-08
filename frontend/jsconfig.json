@@ -11,5 +11,5 @@
     "baseUrl": "."
   },
   "include": ["src/**/*.js", "src/**/*.d.ts"],
-  "exclude": ["dist", "node_modules"]
+  "exclude": ["dist", "node_modules", "src/**/*.test.js", "test/**/*.js"]
 }

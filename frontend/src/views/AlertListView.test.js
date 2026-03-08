@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { ref } from 'vue'
+import { withUiGlobal } from '../test-utils/ui.js'
 
 const routerPush = vi.fn()
 const messageMocks = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }))
@@ -38,9 +39,7 @@ describe('AlertListView', () => {
   })
 
   it('loads alerts on mount and resets filters', async () => {
-    const wrapper = mount(AlertListView, {
-      global: { stubs: ['el-card', 'el-table', 'el-table-column', 'el-form', 'el-form-item', 'el-select', 'el-option', 'el-button', 'el-pagination', 'el-dialog', 'el-descriptions', 'el-descriptions-item', 'el-tag', 'el-icon'] },
-    })
+const wrapper = mount(AlertListView, withUiGlobal())
     await flushPromises()
     expect(store.fetchAlerts).toHaveBeenCalled()
     wrapper.vm.handleReset()
@@ -49,9 +48,7 @@ describe('AlertListView', () => {
 
   it('submits analysis, refreshes list, starts polling and routes to chains when trace_id exists', async () => {
     store.submitAnalysis.mockResolvedValueOnce({ trace_id: 'trace-1' })
-    const wrapper = mount(AlertListView, {
-      global: { stubs: ['el-card', 'el-table', 'el-table-column', 'el-form', 'el-form-item', 'el-select', 'el-option', 'el-button', 'el-pagination', 'el-dialog', 'el-descriptions', 'el-descriptions-item', 'el-tag', 'el-icon'] },
-    })
+const wrapper = mount(AlertListView, withUiGlobal())
     await flushPromises()
 
     await wrapper.vm.handleAnalyze()
@@ -65,9 +62,7 @@ describe('AlertListView', () => {
   it('routes to chains when direct analysis result returns attack_chain_id', async () => {
     store.submitAnalysis.mockResolvedValueOnce({ attack_chain_id: 88 })
 
-    const wrapper = mount(AlertListView, {
-      global: { stubs: ['el-card', 'el-table', 'el-table-column', 'el-form', 'el-form-item', 'el-select', 'el-option', 'el-button', 'el-pagination', 'el-dialog', 'el-descriptions', 'el-descriptions-item', 'el-tag', 'el-icon'] },
-    })
+const wrapper = mount(AlertListView, withUiGlobal())
     await flushPromises()
 
     await wrapper.vm.handleAnalyze()
@@ -78,9 +73,7 @@ describe('AlertListView', () => {
   it('shows error message when analysis submission fails', async () => {
     store.submitAnalysis.mockResolvedValueOnce(null)
 
-    const wrapper = mount(AlertListView, {
-      global: { stubs: ['el-card', 'el-table', 'el-table-column', 'el-form', 'el-form-item', 'el-select', 'el-option', 'el-button', 'el-pagination', 'el-dialog', 'el-descriptions', 'el-descriptions-item', 'el-tag', 'el-icon'] },
-    })
+const wrapper = mount(AlertListView, withUiGlobal())
     await flushPromises()
 
     await wrapper.vm.handleAnalyze()
@@ -90,9 +83,7 @@ describe('AlertListView', () => {
 
   it('shows warning when detail fetch fails', async () => {
     store.fetchAlertDetail.mockResolvedValueOnce(null)
-    const wrapper = mount(AlertListView, {
-      global: { stubs: ['el-card', 'el-table', 'el-table-column', 'el-form', 'el-form-item', 'el-select', 'el-option', 'el-button', 'el-pagination', 'el-dialog', 'el-descriptions', 'el-descriptions-item', 'el-tag', 'el-icon'] },
-    })
+const wrapper = mount(AlertListView, withUiGlobal())
     await flushPromises()
 
     await wrapper.vm.showDetail({ id: 3, title: 'summary' })

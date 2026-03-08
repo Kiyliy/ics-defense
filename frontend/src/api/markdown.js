@@ -17,7 +17,7 @@ export function renderMarkdownSafe(text) {
   const source = typeof text === 'string' ? text : ''
 
   try {
-    const rawHtml = marked.parse(source)
+    const rawHtml = /** @type {string} */ (marked.parse(source))
     return DOMPurify.sanitize(rawHtml, {
       USE_PROFILES: { html: true },
     })

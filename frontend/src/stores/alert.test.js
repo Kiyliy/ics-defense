@@ -5,9 +5,11 @@ const apiMocks = vi.hoisted(() => ({
   getAlerts: vi.fn(),
   getAlertDetail: vi.fn(),
   analyzeAlerts: vi.fn(),
+  getAuditLogs: vi.fn(),
 }))
 
 vi.mock('../api', () => apiMocks)
+vi.mock('../api/index.js', () => apiMocks)
 
 import { useAlertStore } from './alert.js'
 
@@ -17,6 +19,7 @@ describe('alert store', () => {
     apiMocks.getAlerts.mockReset()
     apiMocks.getAlertDetail.mockReset()
     apiMocks.analyzeAlerts.mockReset()
+    apiMocks.getAuditLogs.mockReset()
   })
 
   it('fetchAlerts builds params from filters and updates state', async () => {
@@ -65,6 +68,46 @@ describe('alert store', () => {
 
     expect(apiMocks.getAlertDetail).toHaveBeenLastCalledWith(9)
     expect(store.currentAlert).toBeNull()
+  })
+
+
+  it('fetchAlertDetail ignores stale responses and keeps latest detail', async () => {
+    const store = useAlertStore()
+
+    let resolveFirst
+    const first = new Promise((resolve) => {
+      resolveFirst = resolve
+    })
+
+    apiMocks.getAlertDetail
+      .mockReturnValueOnce(first)
+      .mockResolvedValueOnce({ id: 2, title: 'latest' })
+
+    const firstPromise = store.fetchAlertDetail(1)
+    const secondPromise = store.fetchAlertDetail(2)
+
+    resolveFirst?.({ id: 1, title: 'stale' })
+
+    await Promise.all([firstPromise, secondPromise])
+
+    expect(store.currentAlert).toEqual({ id: 2, title: 'latest' })
+  })
+
+  it('pollAnalysisResult checks audit logs before waiting and returns finished payload', async () => {
+    const store = useAlertStore()
+    const sleep = vi.fn().mockResolvedValue(undefined)
+    apiMocks.getAuditLogs.mockResolvedValue({
+      logs: [{ event_type: 'analysis_finished', data: { trace_id: 't-1', risk_level: 'high' } }],
+      total: 1,
+    })
+
+    await expect(store.pollAnalysisResult('t-1', { interval: 10, maxWait: 1000, sleep })).resolves.toEqual({
+      trace_id: 't-1',
+      risk_level: 'high',
+    })
+
+    expect(apiMocks.getAuditLogs).toHaveBeenCalledWith({ trace_id: 't-1' })
+    expect(sleep).not.toHaveBeenCalled()
   })
 
   it('submitAnalysis short-circuits empty selection and handles success/failure', async () => {

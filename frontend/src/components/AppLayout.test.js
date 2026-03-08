@@ -8,7 +8,23 @@ const apiMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../api/index.js', () => apiMocks)
-vi.mock('vue-router', () => ({ useRoute: () => ({ path: '/dashboard' }) }))
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ path: '/dashboard' }),
+  useRouter: () => ({
+    options: {
+      routes: [
+        {
+          path: '/',
+          children: [
+            { path: '/dashboard', meta: { title: '指挥面板', icon: 'Monitor' } },
+            { path: '/alerts', meta: { title: '告警列表', icon: 'Bell' } },
+          ],
+        },
+      ],
+    },
+    push: vi.fn(),
+  }),
+}))
 
 import AppLayout from './AppLayout.vue'
 

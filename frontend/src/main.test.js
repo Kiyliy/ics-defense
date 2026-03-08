@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 const appMocks = vi.hoisted(() => {
   const app = {
@@ -35,15 +35,10 @@ vi.mock('@element-plus/icons-vue', () => ({
   Warning: { name: 'Warning' },
 }))
 
+import './main.js'
+
 describe('main.js', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    vi.resetModules()
-  })
-
-  it('creates app, registers icons, installs pinia and router, then mounts', async () => {
-    await import('./main.js')
-
+  it('creates app, registers icons, installs pinia and router, then mounts', () => {
     expect(appMocks.createApp).toHaveBeenCalled()
     expect(appMocks.createPinia).toHaveBeenCalled()
     expect(appMocks.app.component).toHaveBeenCalledTimes(14)

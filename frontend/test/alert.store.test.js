@@ -5,9 +5,11 @@ const apiMocks = vi.hoisted(() => ({
   getAlerts: vi.fn(),
   getAlertDetail: vi.fn(),
   analyzeAlerts: vi.fn(),
+  getAuditLogs: vi.fn(),
 }))
 
 vi.mock('../src/api', () => apiMocks)
+vi.mock('../src/api/index.js', () => apiMocks)
 
 import { useAlertStore } from '../src/stores/alert.js'
 
@@ -64,6 +66,15 @@ describe('useAlertStore', () => {
 
     expect(apiMocks.getAlertDetail).toHaveBeenLastCalledWith(8)
     expect(store.currentAlert).toBeNull()
+  })
+
+
+  it('toggleSelection de-duplicates and filters invalid ids', () => {
+    const store = useAlertStore()
+
+    store.toggleSelection([1, 1, 2, Number.NaN, 3.2, 4])
+
+    expect(store.selectedIds).toEqual([1, 2, 4])
   })
 
   it('submitAnalysis returns null when no rows are selected and forwards selected ids otherwise', async () => {

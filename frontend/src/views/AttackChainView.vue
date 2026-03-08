@@ -27,7 +27,7 @@
                 <el-table-column prop="title" label="标题" min-width="180" show-overflow-tooltip />
                 <el-table-column prop="severity" label="等级" width="100">
                   <template #default="{ row: alert }">
-                    <el-tag :type="severityType(alert.severity)" size="small">
+                    <el-tag :type="getSeverityTagType(alert.severity)" size="small">
                       {{ alert.severity }}
                     </el-tag>
                   </template>
@@ -53,7 +53,7 @@
                 <el-table-column prop="status" label="状态" width="120">
                   <template #default="{ row: dec }">
                     <el-tag
-                      :type="dec.status === 'accepted' ? 'success' : dec.status === 'rejected' ? 'danger' : 'warning'"
+                      :type="getStatusTagType(dec.status)"
                       size="small"
                     >
                       {{ dec.status }}
@@ -90,7 +90,7 @@
         <el-table-column prop="name" label="攻击链名称" min-width="200" show-overflow-tooltip />
         <el-table-column prop="risk_level" label="风险等级" width="120">
           <template #default="{ row }">
-            <el-tag :type="riskType(row.risk_level)" size="small">
+            <el-tag :type="getRiskTagType(row.risk_level)" size="small">
               {{ row.risk_level }}
             </el-tag>
           </template>
@@ -108,19 +108,10 @@ import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getAttackChains, updateDecision } from '../api'
 import { normalizeAttackChain } from '../api/view-models.js'
+import { getSeverityTagType, getRiskTagType, getStatusTagType } from '../utils/ui.js'
 
 const chains = ref([])
 const loading = ref(false)
-
-function severityType(severity) {
-  const map = { critical: 'danger', high: 'warning', medium: '', low: 'info' }
-  return map[severity] || 'info'
-}
-
-function riskType(level) {
-  const map = { critical: 'danger', high: 'danger', medium: 'warning', low: 'success' }
-  return map[level] || 'info'
-}
 
 async function fetchChains() {
   loading.value = true

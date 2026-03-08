@@ -61,10 +61,11 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { getAgentStatus, getBackendHealth } from '../api/index.js'
 
 const route = useRoute()
+const router = useRouter()
 const isCollapse = ref(false)
 const systemHealth = ref({
   backend: 'checking',
@@ -77,14 +78,17 @@ let healthTimer = null
 
 const activeMenu = computed(() => route.path)
 
-const menuItems = [
-  { path: '/dashboard', title: '指挥面板', icon: 'Monitor' },
-  { path: '/alerts', title: '告警列表', icon: 'Bell' },
-  { path: '/chains', title: '攻击链', icon: 'Connection' },
-  { path: '/chat', title: 'AI 对话', icon: 'ChatDotRound' },
-  { path: '/approval', title: '审批队列', icon: 'Checked' },
-  { path: '/audit', title: '审计日志', icon: 'Document' },
-]
+const menuItems = computed(() => {
+  const layoutRoute = router.options.routes.find((r) => r.path === '/')
+  if (!layoutRoute || !layoutRoute.children) return []
+  return layoutRoute.children
+    .filter((r) => r.meta && r.meta.title)
+    .map((r) => ({
+      path: '/' + r.path,
+      title: r.meta.title,
+      icon: r.meta.icon,
+    }))
+})
 
 const backendStatusText = computed(() => {
   if (systemHealth.value.backend === 'healthy' && systemHealth.value.backendTimestamp) {

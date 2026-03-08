@@ -30,12 +30,8 @@ export default defineConfig({
         manualChunks(id) {
           if (!id.includes('node_modules')) return
           if (id.includes('echarts')) return 'echarts'
-          if (id.includes('element-plus/es/components')) {
-            const match = id.match(/element-plus\/es\/components\/([^/]+)/)
-            return match ? `ep-${match[1]}` : 'element-plus'
-          }
-          if (id.includes('element-plus')) return 'element-plus-core'
           if (id.includes('@element-plus/icons-vue')) return 'element-plus-icons'
+          if (id.includes('element-plus')) return 'element-plus'
           if (id.includes('vue') || id.includes('pinia') || id.includes('vue-router')) {
             return 'vue-vendor'
           }

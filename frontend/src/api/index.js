@@ -59,17 +59,28 @@ import { ElMessage } from 'element-plus'
  */
 
 /**
- * The response interceptor already extracts res.data, so http methods
- * resolve directly to the JSON payload. This helper just awaits the promise
- * for a uniform call-site style.
- *
- * @template T
- * @param {Promise<T>} request
- * @returns {Promise<T>}
+ * @typedef {{
+ *   id?: number
+ *   trace_id?: string
+ *   event_type?: string
+ *   data?: unknown
+ *   token_usage?: string | null
+ *   created_at?: string
+ * }} AuditLogRecord
  */
-async function unwrap(request) {
-  return await request
-}
+
+/**
+ * @typedef {{ logs: AuditLogRecord[], total: number }} AuditLogsResponse
+ */
+
+/**
+ * @typedef {{
+ *   total_analyses?: number
+ *   total_input_tokens?: number
+ *   total_output_tokens?: number
+ *   daily?: Array<{ date: string, analyses: number, tokens: number }>
+ * }} AuditStatsResponse
+ */
 
 const http = axios.create({
   baseURL: '/api',
@@ -85,30 +96,54 @@ function resolveAgentStatusUrl() {
   return `${protocol}//${hostname}:8000/status`
 }
 
+/**
+ * @param {unknown} payload
+ * @returns {string | null}
+ */
+function extractErrorMessage(payload) {
+  if (!payload) return null
+  if (typeof payload === 'string') return payload
+  if (typeof payload !== 'object') return null
+
+  if ('detail' in payload && payload.detail) {
+    return typeof payload.detail === 'string' ? payload.detail : JSON.stringify(payload.detail)
+  }
+
+  if ('message' in payload && payload.message) {
+    return String(payload.message)
+  }
+
+  return null
+}
+
+/**
+ * @template T
+ * @param {Promise<T>} request
+ * @returns {Promise<T>}
+ */
+function request(request) {
+  return request
+}
+
 http.interceptors.response.use(
   (res) => res.data,
   (err) => {
     console.error('API Error:', err)
-    if (err.response && err.response.status === 400) {
-      const data = err.response.data
-      let msg = '请求参数错误'
-      if (data && typeof data === 'object') {
-        if (data.detail) {
-          msg = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)
-        } else if (data.message) {
-          msg = data.message
-        }
-      } else if (typeof data === 'string') {
-        msg = data
-      }
-      ElMessage.error(msg)
+
+    const response = err?.response
+    const status = response?.status
+    const message = extractErrorMessage(response?.data)
+
+    if (status === 400 && message) {
+      ElMessage.error(message)
     }
+
     return Promise.reject(err)
   }
 )
 
 // Dashboard
-export const getBackendHealth = () => unwrap(http.get('/health'))
+export const getBackendHealth = () => request(http.get('/health'))
 
 /**
  * @param {{ url?: string, fetchImpl?: typeof fetch }} [options]
@@ -132,21 +167,21 @@ export async function getAgentStatus(options = {}) {
   return response.json()
 }
 
-export const getDashboardStats = () => unwrap(http.get('/dashboard/stats'))
-export const getDashboardTrend = () => unwrap(http.get('/dashboard/trend'))
+export const getDashboardStats = () => request(http.get('/dashboard/stats'))
+export const getDashboardTrend = () => request(http.get('/dashboard/trend'))
 
 // Alerts
 /**
  * @param {AlertQueryParams} params
  * @returns {Promise<AlertsResponse>}
  */
-export const getAlerts = (params) => unwrap(http.get('/alerts', { params }))
+export const getAlerts = (params) => request(http.get('/alerts', { params }))
 
 /**
  * @param {number | string} id
  * @returns {Promise<AlertRecord>}
  */
-export const getAlertDetail = (id) => unwrap(http.get(`/alerts/${id}`))
+export const getAlertDetail = (id) => request(http.get(`/alerts/${id}`))
 
 // Analysis
 /**
@@ -154,27 +189,27 @@ export const getAlertDetail = (id) => unwrap(http.get(`/alerts/${id}`))
  * @returns {Promise<AnalysisResponse>}
  */
 export const analyzeAlerts = (alertIds) =>
-  unwrap(http.post('/analysis/alerts', { alert_ids: alertIds }))
+  request(http.post('/analysis/alerts', { alert_ids: alertIds }))
 
 /**
  * @param {ChatMessage[]} messages
  * @returns {Promise<{ reply: string | null }>}
  */
 export const chatWithAI = (messages) =>
-  unwrap(http.post('/analysis/chat', { messages }))
+  request(http.post('/analysis/chat', { messages }))
 
-export const getAttackChains = () => unwrap(http.get('/analysis/chains'))
+export const getAttackChains = () => request(http.get('/analysis/chains'))
 
 /**
  * @param {number | string} id
  * @param {string} status
  */
 export const updateDecision = (id, status) =>
-  unwrap(http.patch(`/analysis/decisions/${id}`, { status }))
+  request(http.patch(`/analysis/decisions/${id}`, { status }))
 
 // Approval
 /** @param {Record<string, string | number>} params */
-export const getApprovals = (params) => unwrap(http.get('/approval', { params }))
+export const getApprovals = (params) => request(http.get('/approval', { params }))
 
 /**
  * @param {number | string} id
@@ -182,13 +217,19 @@ export const getApprovals = (params) => unwrap(http.get('/approval', { params })
  * @param {string} reason
  */
 export const respondApproval = (id, status, reason) =>
-  unwrap(http.patch(`/approval/${id}`, { status, reason }))
+  request(http.patch(`/approval/${id}`, { status, reason }))
 
 // Audit
-/** @param {Record<string, string | number>} params */
-export const getAuditLogs = (params) => unwrap(http.get('/audit', { params }))
+/**
+ * @param {Record<string, string | number>} params
+ * @returns {Promise<AuditLogsResponse>}
+ */
+export const getAuditLogs = (params) => request(http.get('/audit', { params }))
 
-/** @param {Record<string, string | number>} [params] */
-export const getAuditStats = (params = {}) => unwrap(http.get('/audit/stats', { params }))
+/**
+ * @param {Record<string, string | number>} [params]
+ * @returns {Promise<AuditStatsResponse>}
+ */
+export const getAuditStats = (params = {}) => request(http.get('/audit/stats', { params }))
 
 export default http

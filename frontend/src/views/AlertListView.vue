@@ -84,7 +84,7 @@
         <el-table-column prop="source" label="来源" width="100" />
         <el-table-column prop="severity" label="等级" width="100">
           <template #default="{ row }">
-            <el-tag :type="severityType(row.severity)" size="small">
+            <el-tag :type="getSeverityTagType(row.severity)" size="small">
               {{ row.severity }}
             </el-tag>
           </template>
@@ -95,7 +95,7 @@
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
             <el-tag
-              :type="statusType(row.status)"
+              :type="getStatusTagType(row.status)"
               size="small"
             >
               {{ row.status }}
@@ -131,7 +131,7 @@
         <el-descriptions-item label="ID">{{ currentDetail.id }}</el-descriptions-item>
         <el-descriptions-item label="来源">{{ currentDetail.source }}</el-descriptions-item>
         <el-descriptions-item label="等级">
-          <el-tag :type="severityType(currentDetail.severity)" size="small">
+          <el-tag :type="getSeverityTagType(currentDetail.severity)" size="small">
             {{ currentDetail.severity }}
           </el-tag>
         </el-descriptions-item>
@@ -153,21 +153,12 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAlertStore } from '../stores/alert'
+import { getSeverityTagType, getStatusTagType } from '../utils/ui.js'
 
 const store = useAlertStore()
 const router = useRouter()
 const detailVisible = ref(false)
 const currentDetail = ref(null)
-
-function severityType(severity) {
-  const map = { critical: 'danger', high: 'warning', medium: '', low: 'info' }
-  return map[severity] || 'info'
-}
-
-function statusType(status) {
-  const map = { open: 'danger', analyzing: 'warning', analyzed: '', resolved: 'success' }
-  return map[status] || 'info'
-}
 
 function handleSearch() {
   store.fetchAlerts()

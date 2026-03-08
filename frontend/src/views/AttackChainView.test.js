@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { withUiGlobal } from '../test-utils/ui.js'
 
 const apiMocks = vi.hoisted(() => ({
   getAttackChains: vi.fn(),
@@ -27,18 +28,14 @@ describe('AttackChainView', () => {
   })
 
   it('loads chain data on mount', async () => {
-    const wrapper = mount(AttackChainView, {
-      global: { stubs: ['el-card', 'el-table', 'el-table-column', 'el-tag', 'el-button'] },
-    })
+const wrapper = mount(AttackChainView, withUiGlobal())
     await flushPromises()
     expect(apiMocks.getAttackChains).toHaveBeenCalled()
     expect(wrapper.text()).toContain('攻击链分析')
   })
 
   it('updates decision and refreshes list', async () => {
-    const wrapper = mount(AttackChainView, {
-      global: { stubs: ['el-card', 'el-table', 'el-table-column', 'el-tag', 'el-button'] },
-    })
+const wrapper = mount(AttackChainView, withUiGlobal())
     await flushPromises()
 
     await wrapper.vm.handleDecision(9, 'accepted')
@@ -51,9 +48,7 @@ describe('AttackChainView', () => {
   it('shows error message when decision update fails', async () => {
     apiMocks.updateDecision.mockRejectedValueOnce(new Error('update failed'))
 
-    const wrapper = mount(AttackChainView, {
-      global: { stubs: ['el-card', 'el-table', 'el-table-column', 'el-tag', 'el-button'] },
-    })
+const wrapper = mount(AttackChainView, withUiGlobal())
     await flushPromises()
 
     await wrapper.vm.handleDecision(9, 'accepted')

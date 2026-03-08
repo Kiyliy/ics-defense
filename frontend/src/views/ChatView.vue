@@ -45,49 +45,49 @@
           <div :class="['chat-bubble', msg.role]">
             <template v-if="msg.role === 'assistant'">
               <!-- Structured AI response -->
-              <template v-if="parseAIResponse(msg.content)">
+              <template v-if="msg._parsed">
                 <div class="ai-structured">
-                  <div class="ai-analysis" v-html="renderMarkdown(parseAIResponse(msg.content).analysis || '')"></div>
+                  <div class="ai-analysis" v-html="renderMarkdown(msg._parsed.analysis || '')"></div>
 
-                  <div class="ai-tags" v-if="parseAIResponse(msg.content).risk_level || parseAIResponse(msg.content).confidence">
+                  <div class="ai-tags" v-if="msg._parsed.risk_level || msg._parsed.confidence">
                     <el-tag
-                      v-if="parseAIResponse(msg.content).risk_level"
-                      :type="riskTagType(parseAIResponse(msg.content).risk_level)"
+                      v-if="msg._parsed.risk_level"
+                      :type="getRiskTagType(msg._parsed.risk_level)"
                       size="small"
-                    >风险等级: {{ parseAIResponse(msg.content).risk_level }}</el-tag>
+                    >风险等级: {{ msg._parsed.risk_level }}</el-tag>
                     <el-tag
-                      v-if="parseAIResponse(msg.content).confidence"
+                      v-if="msg._parsed.confidence"
                       type="info"
                       size="small"
-                    >置信度: {{ parseAIResponse(msg.content).confidence }}</el-tag>
+                    >置信度: {{ msg._parsed.confidence }}</el-tag>
                     <el-tag
-                      v-if="parseAIResponse(msg.content).action_type"
+                      v-if="msg._parsed.action_type"
                       type="warning"
                       size="small"
-                    >动作: {{ parseAIResponse(msg.content).action_type }}</el-tag>
+                    >动作: {{ msg._parsed.action_type }}</el-tag>
                   </div>
 
-                  <div class="ai-fields" v-if="parseAIResponse(msg.content).mitre_tactic || parseAIResponse(msg.content).mitre_technique">
-                    <div v-if="parseAIResponse(msg.content).mitre_tactic" class="ai-field">
+                  <div class="ai-fields" v-if="msg._parsed.mitre_tactic || msg._parsed.mitre_technique">
+                    <div v-if="msg._parsed.mitre_tactic" class="ai-field">
                       <span class="ai-field-label">MITRE 战术:</span>
-                      <span>{{ parseAIResponse(msg.content).mitre_tactic }}</span>
+                      <span>{{ msg._parsed.mitre_tactic }}</span>
                     </div>
-                    <div v-if="parseAIResponse(msg.content).mitre_technique" class="ai-field">
+                    <div v-if="msg._parsed.mitre_technique" class="ai-field">
                       <span class="ai-field-label">MITRE 技术:</span>
-                      <span>{{ parseAIResponse(msg.content).mitre_technique }}</span>
+                      <span>{{ msg._parsed.mitre_technique }}</span>
                     </div>
                   </div>
 
-                  <div v-if="parseAIResponse(msg.content).rationale" class="ai-field">
+                  <div v-if="msg._parsed.rationale" class="ai-field">
                     <span class="ai-field-label">依据:</span>
-                    <span>{{ parseAIResponse(msg.content).rationale }}</span>
+                    <span>{{ msg._parsed.rationale }}</span>
                   </div>
 
                   <el-alert
-                    v-if="parseAIResponse(msg.content).recommendation"
+                    v-if="msg._parsed.recommendation"
                     :title="'建议'"
                     type="success"
-                    :description="parseAIResponse(msg.content).recommendation"
+                    :description="msg._parsed.recommendation"
                     :closable="false"
                     show-icon
                     style="margin-top: 8px"
@@ -139,6 +139,7 @@ import { ref, nextTick, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { chatWithAI } from '../api'
 import { renderMarkdownSafe } from '../api/markdown.js'
+import { getRiskTagType } from '../utils/ui.js'
 
 const conversations = ref([{ title: '新对话', messages: [] }])
 const currentConvIndex = ref(0)
@@ -147,7 +148,12 @@ const sending = ref(false)
 const messageArea = ref(null)
 
 const currentMessages = computed(() => {
-  return conversations.value[currentConvIndex.value]?.messages || []
+  return (conversations.value[currentConvIndex.value]?.messages || []).map((msg) => {
+    if (msg.role === 'assistant' && msg._parsed === undefined) {
+      msg._parsed = parseAIResponse(msg.content)
+    }
+    return msg
+  })
 })
 
 function renderMarkdown(text) {
@@ -165,15 +171,6 @@ function parseAIResponse(content) {
   } catch {
     return null
   }
-}
-
-function riskTagType(level) {
-  if (!level) return 'info'
-  const l = level.toLowerCase()
-  if (l === 'high' || l === '高') return 'danger'
-  if (l === 'medium' || l === '中') return 'warning'
-  if (l === 'low' || l === '低') return 'success'
-  return 'info'
 }
 
 function newConversation() {
