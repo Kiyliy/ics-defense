@@ -50,7 +50,7 @@ _running_tasks: dict[str, dict[str, Any]] = {}  # trace_id -> {task, status, res
 
 class AnalyzeRequest(BaseModel):
     """分析请求"""
-    alert_ids: list[int] = Field(..., description="需要分析的告警 ID 列表")
+    alert_ids: list[int] = Field(..., min_length=1, description="需要分析的告警 ID 列表")
     model: str = Field(default=LLM_MODEL, description="使用的 LLM 模型")
 
 
@@ -165,6 +165,9 @@ def _get_db_connection() -> sqlite3.Connection:
 
 def _fetch_alerts_by_ids(alert_ids: list[int]) -> list[dict]:
     """根据 ID 列表查询告警数据"""
+    if not alert_ids:
+        return []
+
     conn = _get_db_connection()
     try:
         placeholders = ",".join("?" for _ in alert_ids)
@@ -183,16 +186,23 @@ def _make_clustered_alerts(alerts: list[dict]) -> list[dict]:
     if not alerts:
         return []
 
-    clusters: dict[str, list[dict]] = {}
+    clusters: dict[tuple[str, str, str, str], list[dict]] = {}
     for alert in alerts:
         title = alert.get("title", "unknown")
-        clusters.setdefault(title, []).append(alert)
+        signature = (
+            title,
+            alert.get("source", "unknown"),
+            alert.get("src_ip", ""),
+            alert.get("dst_ip", ""),
+        )
+        clusters.setdefault(signature, []).append(alert)
 
     result = []
-    for title, group in clusters.items():
+    for signature_parts, group in clusters.items():
+        title, source, src_ip, dst_ip = signature_parts
         sample = group[0]
         result.append({
-            "signature": title,
+            "signature": "|".join([title, source, src_ip or "-", dst_ip or "-"]),
             "sample": sample,
             "count": len(group),
             "severity": sample.get("severity", "medium"),
@@ -277,7 +287,7 @@ def _persist_analysis_result(trace_id: str, alert_ids: list[int], result: dict) 
 
         conn.executemany(
             "UPDATE alerts SET status = ? WHERE id = ?",
-            [("analyzed", alert_id) for alert_id in alert_ids],
+            [("resolved", alert_id) for alert_id in alert_ids],
         )
         conn.commit()
     finally:

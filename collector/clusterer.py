@@ -10,6 +10,16 @@ from datetime import datetime, timezone
 from dataclasses import dataclass, field, asdict
 
 
+def _parse_timestamp(value: str | None) -> datetime | None:
+    """解析 ISO 时间戳；无法解析时返回 None。"""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
 @dataclass
 class ClusteredAlert:
     """聚簇后的告警"""
@@ -18,7 +28,7 @@ class ClusteredAlert:
     count: int = 1
     first_seen: str = ""
     last_seen: str = ""
-    severity: str = "info"
+    severity: str = "low"
     source_ips: list = field(default_factory=list)
     target_ips: list = field(default_factory=list)
 
@@ -54,11 +64,19 @@ class AlertClusterer:
         """添加一条告警到聚簇器，返回 signature"""
         sig = self._compute_signature(alert)
         now = alert.get("timestamp") or datetime.now(timezone.utc).isoformat()
+        now_dt = _parse_timestamp(now)
 
         if sig in self.clusters:
             cluster = self.clusters[sig]
             cluster.count += 1
-            cluster.last_seen = now
+            first_dt = _parse_timestamp(cluster.first_seen)
+            last_dt = _parse_timestamp(cluster.last_seen)
+
+            if first_dt is None or (now_dt is not None and now_dt < first_dt):
+                cluster.first_seen = now
+            if last_dt is None or (now_dt is not None and now_dt > last_dt):
+                cluster.last_seen = now
+
             # 收集去重的 IP
             src_ip = alert.get("src_ip")
             dst_ip = alert.get("dst_ip")
@@ -66,6 +84,10 @@ class AlertClusterer:
                 cluster.source_ips.append(src_ip)
             if dst_ip and dst_ip not in cluster.target_ips:
                 cluster.target_ips.append(dst_ip)
+
+            severity = alert.get("severity")
+            if severity == "critical" and cluster.severity != "critical":
+                cluster.severity = severity
         else:
             self.clusters[sig] = ClusteredAlert(
                 signature=sig,
@@ -73,7 +95,7 @@ class AlertClusterer:
                 count=1,
                 first_seen=now,
                 last_seen=now,
-                severity=alert.get("severity", "info"),
+                severity=alert.get("severity", "low"),
                 source_ips=[alert["src_ip"]] if alert.get("src_ip") else [],
                 target_ips=[alert["dst_ip"]] if alert.get("dst_ip") else [],
             )

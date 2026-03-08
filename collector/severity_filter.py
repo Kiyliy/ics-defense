@@ -7,13 +7,29 @@
 
 class SeverityFilter:
     """按严重级别过滤告警"""
-    AGENT_LEVELS = {"critical", "error"}  # 进入 Agent 分析的级别
-    STORE_ONLY_LEVELS = {"warning", "info"}  # 仅存储的级别
+    AGENT_LEVELS = {"critical", "high"}  # 进入 Agent 分析的级别
+    STORE_ONLY_LEVELS = {"medium", "low"}  # 仅存储的级别
+
+    SEVERITY_ALIASES = {
+        "crit": "critical",
+        "严重": "critical",
+        "err": "high",
+        "error": "high",
+        "warn": "medium",
+        "warning": "medium",
+        "med": "medium",
+        "info": "low",
+    }
+
+    @staticmethod
+    def _normalize_severity(severity) -> str:
+        value = str(severity or "low").strip().lower()
+        return SeverityFilter.SEVERITY_ALIASES.get(value, value)
 
     @staticmethod
     def should_analyze(severity: str) -> bool:
         """是否应该进入 Agent 分析"""
-        return severity.lower() in SeverityFilter.AGENT_LEVELS
+        return SeverityFilter._normalize_severity(severity) in SeverityFilter.AGENT_LEVELS
 
     @staticmethod
     def filter_for_agent(alerts: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -21,9 +37,10 @@ class SeverityFilter:
         to_analyze = []
         store_only = []
         for alert in alerts:
-            severity = alert.get("severity", "info").lower()
+            severity = SeverityFilter._normalize_severity(alert.get("severity", "low"))
+            normalized_alert = {**alert, "severity": severity}
             if severity in SeverityFilter.AGENT_LEVELS:
-                to_analyze.append(alert)
+                to_analyze.append(normalized_alert)
             else:
-                store_only.append(alert)
+                store_only.append(normalized_alert)
         return to_analyze, store_only

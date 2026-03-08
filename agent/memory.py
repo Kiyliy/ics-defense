@@ -1,5 +1,8 @@
+import logging
 import uuid
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 
 class AgentMemory:
@@ -112,22 +115,72 @@ class Mem0Memory:
     """Mem0 实现（生产环境用）"""
 
     def __init__(self, config: dict):
-        # from mem0 import Memory
-        # self.m = Memory.from_config(config)
         self.config = config
+        self._fallback_store = SimpleMemory()
+        self.backend = "simple-fallback"
+        self.reason = "mem0-sdk-unavailable"
+        self._client = None
+
+        try:
+            from mem0 import Memory  # type: ignore
+        except Exception as exc:
+            logger.warning("Mem0 SDK unavailable, falling back to in-memory store: %s", exc)
+            return
+
+        try:
+            self._client = Memory.from_config(config or {})
+            self.backend = "mem0"
+            self.reason = None
+        except Exception as exc:
+            logger.warning("Mem0 initialization failed, falling back to in-memory store: %s", exc)
 
     async def search(self, query: str, top_k: int = 5) -> list:
         """检索记忆"""
-        pass
+        if self._client is None:
+            return await self._fallback_store.search(query, top_k)
+        results = self._client.search(query=query, limit=top_k) or []
+        normalized = []
+        for item in results:
+            normalized.append({
+                "id": item.get("id") or item.get("memory_id") or str(uuid.uuid4()),
+                "content": item.get("memory") or item.get("text") or item.get("content") or "",
+                "score": item.get("score", 0),
+                "created_at": item.get("created_at") or datetime.now(timezone.utc).isoformat(),
+            })
+        return normalized
 
     async def add(self, content: str, metadata: dict = None) -> str:
         """添加记忆"""
-        pass
+        if self._client is None:
+            return await self._fallback_store.add(content, metadata)
+        result = self._client.add(content, metadata=metadata or {})
+        if isinstance(result, dict):
+            return result.get("id") or result.get("memory_id") or str(uuid.uuid4())
+        return str(result)
 
     async def list_all(self, limit: int = 20) -> list:
         """列出所有"""
-        pass
+        if self._client is None:
+            return await self._fallback_store.list_all(limit)
+        try:
+            results = self._client.get_all(limit=limit) or []
+        except AttributeError:
+            logger.warning("Mem0 client does not support get_all(); using fallback memory list")
+            return await self._fallback_store.list_all(limit)
+
+        normalized = []
+        for item in results:
+            normalized.append({
+                "id": item.get("id") or item.get("memory_id") or str(uuid.uuid4()),
+                "content": item.get("memory") or item.get("text") or item.get("content") or "",
+                "metadata": item.get("metadata") or {},
+                "created_at": item.get("created_at") or datetime.now(timezone.utc).isoformat(),
+            })
+        return normalized[:limit]
 
     async def remove(self, memory_id: str) -> bool:
         """删除"""
-        pass
+        if self._client is None:
+            return await self._fallback_store.remove(memory_id)
+        result = self._client.delete(memory_id)
+        return bool(result if not isinstance(result, dict) else result.get("success", result.get("deleted", False)))

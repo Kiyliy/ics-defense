@@ -42,17 +42,18 @@ def client(service_db_path: str):
         service._mcp_client = old_mcp
 
 
-def test_make_clustered_alerts_groups_by_title_and_dedupes_ips():
+def test_make_clustered_alerts_uses_source_and_ips_in_signature():
     alerts = [
-        {'title': 'SQL注入', 'severity': 'high', 'src_ip': '10.0.0.1', 'dst_ip': '192.168.0.10', 'created_at': '2026-03-08T10:00:00Z'},
-        {'title': 'SQL注入', 'severity': 'high', 'src_ip': '10.0.0.1', 'dst_ip': '192.168.0.10', 'created_at': '2026-03-08T10:01:00Z'},
-        {'title': '端口扫描', 'severity': 'medium', 'src_ip': '10.0.0.2', 'dst_ip': '192.168.0.11', 'created_at': '2026-03-08T10:02:00Z'},
+        {'title': 'SQL注入', 'source': 'waf', 'severity': 'high', 'src_ip': '10.0.0.1', 'dst_ip': '192.168.0.10', 'created_at': '2026-03-08T10:00:00Z'},
+        {'title': 'SQL注入', 'source': 'waf', 'severity': 'high', 'src_ip': '10.0.0.1', 'dst_ip': '192.168.0.10', 'created_at': '2026-03-08T10:01:00Z'},
+        {'title': 'SQL注入', 'source': 'waf', 'severity': 'high', 'src_ip': '10.0.0.9', 'dst_ip': '192.168.0.10', 'created_at': '2026-03-08T10:02:00Z'},
+        {'title': '端口扫描', 'source': 'nids', 'severity': 'medium', 'src_ip': '10.0.0.2', 'dst_ip': '192.168.0.11', 'created_at': '2026-03-08T10:03:00Z'},
     ]
 
     clusters = service._make_clustered_alerts(alerts)
 
-    assert len(clusters) == 2
-    sql_cluster = next(cluster for cluster in clusters if cluster['signature'] == 'SQL注入')
+    assert len(clusters) == 3
+    sql_cluster = next(cluster for cluster in clusters if cluster['signature'] == 'SQL注入|waf|10.0.0.1|192.168.0.10')
     assert sql_cluster['count'] == 2
     assert sql_cluster['first_seen'] == '2026-03-08T10:00:00Z'
     assert sql_cluster['last_seen'] == '2026-03-08T10:01:00Z'

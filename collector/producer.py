@@ -25,6 +25,8 @@ class AlertProducer:
         """发布一条聚簇告警到 Redis Streams
         返回 message_id
         """
+        if not isinstance(clustered_alert, dict):
+            raise TypeError("clustered_alert must be a dict")
         client = self._get_client()
         return client.xadd(self.stream_key, {"data": json.dumps(clustered_alert, ensure_ascii=False)})
 

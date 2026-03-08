@@ -49,6 +49,18 @@ def test_analyze_returns_404_when_alerts_not_found(monkeypatch, test_db_path):
     assert response.json()["detail"] == "未找到指定告警"
 
 
+def test_analyze_rejects_empty_alert_ids(monkeypatch, test_db_path):
+    with _make_client(monkeypatch, test_db_path) as client:
+        response = client.post("/analyze", json={"alert_ids": []})
+
+    assert response.status_code == 422
+
+
+def test_fetch_alerts_by_ids_returns_empty_for_empty_ids(monkeypatch, test_db_path):
+    monkeypatch.setattr(service, "DB_PATH", test_db_path)
+    assert service._fetch_alerts_by_ids([]) == []
+
+
 def test_analyze_starts_task_and_exposes_status(monkeypatch, test_db_path):
     conn = service.sqlite3.connect(test_db_path)
     _insert_alert(conn, 1, title="SQL Injection")
@@ -63,6 +75,7 @@ def test_analyze_starts_task_and_exposes_status(monkeypatch, test_db_path):
         }
         assert len(clustered_alerts) == 1
         assert clustered_alerts[0]["count"] == 2
+        assert clustered_alerts[0]["signature"] == 'SQL Injection|waf|10.0.0.1|192.168.1.10'
         assert model == "test-model"
 
     monkeypatch.setattr(service, "_run_analysis", fake_run_analysis)

@@ -41,7 +41,7 @@ class TestNormalizeWAF:
         assert isinstance(result, NormalizedAlert)
         assert result.source == "waf"
         assert result.title == "SQL Injection Detected"
-        assert result.severity == "error"
+        assert result.severity == "high"
         assert result.src_ip == "10.0.0.1"
         assert result.dst_ip == "192.168.1.1"
         assert result.mitre_tactic == "Execution"
@@ -86,7 +86,7 @@ class TestNormalizeNIDS:
         assert result.mitre_tactic == "Reconnaissance"
 
     def test_normalize_nids_severity_mapping(self):
-        for sev, expected in [(1, "critical"), (2, "error"), (3, "warning"), (4, "info")]:
+        for sev, expected in [(1, "critical"), (2, "high"), (3, "medium"), (4, "low")]:
             raw = {"alert": {"severity": sev}}
             result = normalize_nids(raw)
             assert result.severity == expected, f"severity {sev} should map to {expected}"
@@ -106,7 +106,7 @@ class TestNormalizeHIDS:
         }
         result = normalize_hids(raw)
         assert result.source == "hids"
-        assert result.severity == "info"  # level 3 < 4
+        assert result.severity == "low"  # level 3 < 4
         assert result.title == "Login session opened"
         assert result.src_ip == "10.0.0.8"
         assert result.dst_ip == "192.168.1.20"
@@ -114,7 +114,7 @@ class TestNormalizeHIDS:
         assert result.mitre_tactic == "Initial Access"
 
     def test_normalize_hids_severity_mapping(self):
-        for level, expected in [(3, "info"), (4, "warning"), (8, "error"), (12, "critical"), (15, "critical")]:
+        for level, expected in [(3, "low"), (4, "medium"), (8, "high"), (12, "critical"), (15, "critical")]:
             raw = {"rule": {"level": level}}
             result = normalize_hids(raw)
             assert result.severity == expected, f"level {level} should map to {expected}"
@@ -130,7 +130,7 @@ class TestNormalizePikachu:
         }
         result = normalize_pikachu(raw)
         assert result.source == "pikachu"
-        assert result.severity == "warning"
+        assert result.severity == "medium"
         assert result.title == "XSS Reflected"
         assert result.src_ip == "10.0.0.3"
         assert result.dst_ip == "192.168.1.5"
@@ -148,7 +148,7 @@ class TestNormalizeSOC:
         }
         result = normalize_soc(raw)
         assert result.source == "soc"
-        assert result.severity == "warning"
+        assert result.severity == "medium"
         assert result.title == "Suspicious scan activity"
         assert result.description == "Port scan detected from external IP"
         assert result.mitre_tactic == "Reconnaissance"
@@ -161,7 +161,7 @@ class TestNormalizeDispatch:
         assert isinstance(result, NormalizedAlert)
         # Falls back to normalize_soc
         assert result.title == "Unknown event"
-        assert result.severity == "error"
+        assert result.severity == "high"
 
     def test_normalize_dispatch_waf(self):
         raw = {"rule_name": "Test", "severity": "低"}
@@ -184,7 +184,7 @@ class TestNormalizeDispatch:
 
 class TestClusterer:
     def _make_alert(self, title="Test Alert", src_ip="10.0.0.1", dst_ip="192.168.1.1",
-                    severity="error", source="waf", timestamp=None):
+                    severity="high", source="waf", timestamp=None):
         return {
             "source": source,
             "title": title,
@@ -289,8 +289,8 @@ class TestSeverityFilter:
         to_analyze, store_only = SeverityFilter.filter_for_agent(alerts)
         assert len(to_analyze) == 3  # critical + 2x error
         assert len(store_only) == 2  # warning + info
-        assert all(a["severity"] in ("critical", "error") for a in to_analyze)
-        assert all(a["severity"] in ("warning", "info") for a in store_only)
+        assert all(a["severity"] in ("critical", "high") for a in to_analyze)
+        assert all(a["severity"] in ("medium", "low") for a in store_only)
 
 
 # ============================================================

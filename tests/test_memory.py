@@ -119,3 +119,17 @@ async def test_default_provider():
     mem = AgentMemory()
     assert mem.provider == "simple"
     assert isinstance(mem._store, SimpleMemory)
+
+
+@pytest.mark.asyncio
+async def test_mem0_provider_falls_back_to_safe_in_memory_store():
+    mem = AgentMemory({"provider": "mem0", "mem0_config": {"region": "test"}})
+
+    assert mem.provider == "mem0"
+    assert getattr(mem._store, "backend", None) in {"mem0", "simple-fallback"}
+
+    memory_id = await mem.memorize("mem0 fallback content", metadata={"trace_id": "t-1"})
+    results = await mem.recall("fallback content")
+
+    assert isinstance(memory_id, str) and memory_id
+    assert any(item["content"] == "mem0 fallback content" for item in results)

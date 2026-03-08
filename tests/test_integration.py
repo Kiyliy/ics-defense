@@ -49,7 +49,7 @@ class TestCollectorToAgentPipeline:
         # 验证输出字段完整
         assert alert.source == "waf"
         assert alert.title == "SQL注入攻击"
-        assert alert.severity == "error"  # 高 → error
+        assert alert.severity == "high"  # 高 → high
         assert alert.src_ip == "10.0.0.5"
         assert alert.dst_ip == "192.168.1.100"
         assert alert.mitre_tactic is not None  # 能推断出 MITRE 映射
@@ -73,7 +73,7 @@ class TestCollectorToAgentPipeline:
         }
         alert = normalize("nids", raw_nids)
         assert alert.source == "nids"
-        assert alert.severity == "error"  # severity 2 → error
+        assert alert.severity == "high"  # severity 2 → high
         assert alert.src_ip == "10.0.0.8"
         assert alert.protocol == "TCP"
 
@@ -94,7 +94,7 @@ class TestCollectorToAgentPipeline:
         }
         alert = normalize("hids", raw_hids)
         assert alert.source == "hids"
-        assert alert.severity == "error"  # level 10 → error (>=8)
+        assert alert.severity == "high"  # level 10 → high (>=8)
         assert alert.src_ip == "10.0.0.9"
 
     def test_full_pipeline_normalizer_to_clusterer(self):
@@ -158,12 +158,12 @@ class TestCollectorToAgentPipeline:
         # severity_filter 分流
         to_analyze, store_only = SeverityFilter.filter_for_agent(cluster_dicts)
 
-        # WAF高危 → error级别 → 进入分析
-        # pikachu → warning级别 → 仅存储
+        # WAF高危 → high级别 → 进入分析
+        # pikachu → medium级别 → 仅存储
         assert len(to_analyze) == 1
         assert len(store_only) == 1
-        assert to_analyze[0]["severity"] == "error"
-        assert store_only[0]["severity"] == "warning"
+        assert to_analyze[0]["severity"] == "high"
+        assert store_only[0]["severity"] == "medium"
 
     def test_producer_publish_mock(self):
         """验证 producer 模块可以正常实例化并调用（mock Redis）"""
@@ -176,7 +176,7 @@ class TestCollectorToAgentPipeline:
         producer = AlertProducer(redis_url="redis://localhost:6379")
         producer._client = mock_redis  # 注入 mock
 
-        test_alert = {"signature": "abc123", "count": 5, "severity": "error"}
+        test_alert = {"signature": "abc123", "count": 5, "severity": "high"}
         msg_id = producer.publish(test_alert)
 
         # 验证 xadd 被调用且参数正确
