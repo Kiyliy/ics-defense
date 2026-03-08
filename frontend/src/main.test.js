@@ -35,10 +35,11 @@ vi.mock('@element-plus/icons-vue', () => ({
   Warning: { name: 'Warning' },
 }))
 
-import './main.js'
-
 describe('main.js', () => {
-  it('creates app, registers icons, installs pinia and router, then mounts', () => {
+  it('creates app, registers icons, installs pinia and router, then mounts', async () => {
+    vi.resetModules()
+    await import('./main.js')
+
     expect(appMocks.createApp).toHaveBeenCalled()
     expect(appMocks.createPinia).toHaveBeenCalled()
     expect(appMocks.app.component).toHaveBeenCalledTimes(14)

@@ -1,14 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const routerMocks = vi.hoisted(() => ({
-  createRouterMock: vi.fn((options) => ({
-    options,
-    beforeEach: vi.fn((handler) => {
-      routerMocks.createRouterMock.guard = handler
-    }),
-  })),
-  createWebHistoryMock: vi.fn(() => ({ mode: 'history' })),
+const routerState = vi.hoisted(() => ({
+  guard: null,
+  routerInstance: null,
 }))
+
+const routerMocks = vi.hoisted(() => {
+  const createRouterMock = vi.fn((options) => {
+    const instance = {
+      options,
+      beforeEach: vi.fn((handler) => {
+        routerState.guard = handler
+      }),
+    }
+    routerState.routerInstance = instance
+    return instance
+  })
+
+  return {
+    createRouterMock,
+    createWebHistoryMock: vi.fn(() => ({ mode: 'history' })),
+  }
+})
 
 vi.mock('vue-router', () => ({
   createRouter: routerMocks.createRouterMock,
@@ -42,10 +55,10 @@ describe('router/index', () => {
   it('sets document title in beforeEach guard', () => {
     global.document = { title: '' }
 
-    routerMocks.createRouterMock.guard({ meta: { title: '审计日志' } })
+    routerState.guard({ meta: { title: '审计日志' } })
     expect(global.document.title).toBe('审计日志 - ICS Security')
 
-    routerMocks.createRouterMock.guard({ meta: {} })
+    routerState.guard({ meta: {} })
     expect(global.document.title).toBe('ICS Security')
   })
 })
