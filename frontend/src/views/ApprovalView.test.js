@@ -68,7 +68,8 @@ describe('ApprovalView', () => {
     expect(confirmMock).toHaveBeenCalled()
     expect(apiMocks.respondApproval).toHaveBeenCalledWith(7, 'approved')
     expect(messageMocks.success).toHaveBeenCalledWith('已批准')
-    expect(apiMocks.getApprovals).toHaveBeenCalledTimes(2)
+    // mount fetches pending + all-count (2 calls), approve triggers another refresh (2 more)
+    expect(apiMocks.getApprovals).toHaveBeenCalledTimes(4)
   })
 
   it('ignores user-cancelled approval confirmation', async () => {

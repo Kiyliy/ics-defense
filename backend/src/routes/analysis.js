@@ -3,6 +3,7 @@
 import { Router } from 'express';
 import { analyzeAlerts, chat } from '../services/llm.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
+import { getConfigInt } from '../services/config.js';
 
 const AGENT_SERVICE_URL = process.env.AGENT_SERVICE_URL || 'http://localhost:8000';
 
@@ -137,8 +138,9 @@ export function createAnalysisRouter({
     if (!Array.isArray(messages)) {
       return res.status(400).json({ error: 'messages[] required' });
     }
-    if (messages.length > 50) {
-      return res.status(400).json({ error: 'messages[] exceeds max length (50)' });
+    const maxMessages = getConfigInt('chat.max_messages', 50);
+    if (messages.length > maxMessages) {
+      return res.status(400).json({ error: `messages[] exceeds max length (${maxMessages})` });
     }
     try {
       const reply = await chatFn(messages);

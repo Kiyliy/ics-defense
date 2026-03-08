@@ -2,6 +2,7 @@
 
 import { Router } from 'express';
 import { normalize } from '../services/normalizer.js';
+import { getConfig, getConfigInt } from '../services/config.js';
 
 const router = Router();
 
@@ -20,10 +21,6 @@ function parseNonNegativeInteger(rawValue, fieldName) {
   return { ok: true, value };
 }
 
-/** @type {string[]} */
-const VALID_SOURCES = ['waf', 'nids', 'hids', 'pikachu', 'soc'];
-const MAX_INGEST_EVENTS = 1000;
-
 /**
  * POST /api/alerts/ingest
  * 多源事件接入：接收原始日志，规范化后存入数据库
@@ -35,14 +32,19 @@ router.post('/ingest', (/** @type {any} */ req, /** @type {any} */ res) => {
   if (!source || !Array.isArray(events)) {
     return res.status(400).json({ error: 'source and events[] required' });
   }
-  if (!VALID_SOURCES.includes(source)) {
-    return res.status(400).json({ error: `source must be one of: ${VALID_SOURCES.join(', ')}` });
+
+  // 从 system_config 动态读取
+  const validSources = getConfig('ingest.valid_sources', 'waf,nids,hids,pikachu,soc').split(',').map((s) => s.trim());
+  const maxBatchSize = getConfigInt('ingest.max_batch_size', 1000);
+
+  if (!validSources.includes(source)) {
+    return res.status(400).json({ error: `source must be one of: ${validSources.join(', ')}` });
   }
   if (events.length === 0) {
     return res.status(400).json({ error: 'events[] must not be empty' });
   }
-  if (events.length > MAX_INGEST_EVENTS) {
-    return res.status(400).json({ error: `events[] exceeds max batch size (${MAX_INGEST_EVENTS})` });
+  if (events.length > maxBatchSize) {
+    return res.status(400).json({ error: `events[] exceeds max batch size (${maxBatchSize})` });
   }
 
   const db = req.db;
