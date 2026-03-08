@@ -17,7 +17,10 @@ dotenv.config();
 const app = /** @type {any} */ (express());
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:5174')
+  .split(',')
+  .map((o) => o.trim());
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json({ limit: '10mb' }));
 
 // ---------------------------------------------------------------------------
@@ -30,7 +33,10 @@ app.use((/** @type {any} */ req, /** @type {any} */ res, /** @type {() => void} 
   if (req.path === '/api/health') return next();
 
   // If no token configured, skip auth (dev mode)
-  if (!API_AUTH_TOKEN) return next();
+  if (!API_AUTH_TOKEN) {
+    console.warn('WARNING: API_AUTH_TOKEN is not set — authentication is disabled (dev mode)');
+    return next();
+  }
 
   const authHeader = req.headers['authorization'] || '';
   const apiKeyHeader = req.headers['x-api-key'] || '';

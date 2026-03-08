@@ -118,9 +118,9 @@ class TestTrigger:
         triggered = []
         original = manager._action_push_websocket
 
-        def capture(params, context):
+        async def capture(params, context):
             triggered.append(("push_websocket", params, context))
-            original(params, context)
+            await original(params, context)
 
         manager._action_push_websocket = capture
 
@@ -134,7 +134,7 @@ class TestTrigger:
         """severity=warning 不触发 critical 条件的 hook"""
         triggered = []
 
-        def capture(params, context):
+        async def capture(params, context):
             triggered.append(True)
 
         manager._action_push_websocket = capture
@@ -148,7 +148,7 @@ class TestTrigger:
         """'always' 条件始终触发"""
         triggered = []
 
-        def capture(params, context):
+        async def capture(params, context):
             triggered.append(True)
 
         manager._action_log_info = capture
@@ -161,7 +161,7 @@ class TestTrigger:
     def test_hook_failure_no_block(self, manager):
         """hook action 抛异常不影响返回"""
 
-        def failing_action(params, context):
+        async def failing_action(params, context):
             raise RuntimeError("boom")
 
         manager._action_log_error = failing_action

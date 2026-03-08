@@ -97,9 +97,16 @@ router.get('/', (/** @type {any} */ req, /** @type {any} */ res) => {
  * 查询单条告警详情
  */
 router.get('/:id', (/** @type {any} */ req, /** @type {any} */ res) => {
-  const alert = req.db.prepare('SELECT * FROM alerts WHERE id = ?').get(req.params.id);
+  const alert = req.db.prepare(
+    'SELECT a.*, r.raw_json, r.source as raw_source FROM alerts a LEFT JOIN raw_events r ON a.raw_event_id = r.id WHERE a.id = ?'
+  ).get(req.params.id);
   if (!alert) {
     return res.status(404).json({ error: 'Alert not found' });
+  }
+  if (alert.raw_json) {
+    try {
+      alert.raw_json = JSON.parse(alert.raw_json);
+    } catch { /* keep as string if not valid JSON */ }
   }
   res.json(alert);
 });

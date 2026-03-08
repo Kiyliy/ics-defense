@@ -21,7 +21,7 @@ from datetime import datetime
 from typing import Any, Optional
 from uuid import uuid4
 
-from openai import OpenAI
+from openai import AsyncOpenAI
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 
@@ -468,9 +468,9 @@ async def get_analysis(trace_id: str):
 async def chat(request: ChatRequest):
     """与 LLM 直接对话（简单聊天接口）"""
     try:
-        client = OpenAI(
+        client = AsyncOpenAI(
             api_key=os.environ.get("XAI_API_KEY"),
-            base_url=DEFAULT_BASE_URL,
+            base_url=os.environ.get("XAI_BASE_URL", DEFAULT_BASE_URL),
         )
 
         messages = [
@@ -480,7 +480,7 @@ async def chat(request: ChatRequest):
             for msg in request.messages
         ]
 
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model=request.model,
             max_tokens=4096,
             messages=messages,

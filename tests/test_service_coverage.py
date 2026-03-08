@@ -200,9 +200,9 @@ def test_chat_success_returns_content_and_usage(client):
     fake_response.usage = MagicMock(prompt_tokens=12, completion_tokens=4)
 
     fake_client = MagicMock()
-    fake_client.chat.completions.create.return_value = fake_response
+    fake_client.chat.completions.create = AsyncMock(return_value=fake_response)
 
-    with patch('agent.service.OpenAI', return_value=fake_client):
+    with patch('agent.service.AsyncOpenAI', return_value=fake_client):
         response = client.post('/chat', json={'messages': [{'role': 'user', 'content': 'hello'}], 'model': 'test-model'})
 
     assert response.status_code == 200
@@ -213,9 +213,9 @@ def test_chat_success_returns_content_and_usage(client):
 
 def test_chat_maps_unhandled_exception_to_500(client):
     fake_client = MagicMock()
-    fake_client.chat.completions.create.side_effect = Exception('socket reset')
+    fake_client.chat.completions.create = AsyncMock(side_effect=Exception('socket reset'))
 
-    with patch('agent.service.OpenAI', return_value=fake_client):
+    with patch('agent.service.AsyncOpenAI', return_value=fake_client):
         response = client.post('/chat', json={'messages': [{'role': 'user', 'content': 'hello'}], 'model': 'test-model'})
 
     assert response.status_code == 500

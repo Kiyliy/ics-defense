@@ -254,20 +254,19 @@ export function createAnalysisRouter({
       return res.status(404).json({ error: 'Decision not found' });
     }
 
-    // When a decision is accepted, resolve all related alerts
-    if (status === 'accepted') {
-      const decision = db.prepare('SELECT attack_chain_id FROM decisions WHERE id = ?').get(req.params.id);
-      if (decision) {
-        const chain = db.prepare('SELECT alert_ids FROM attack_chains WHERE id = ?').get(decision.attack_chain_id);
-        if (chain && chain.alert_ids) {
-          try {
-            const alertIds = JSON.parse(chain.alert_ids);
-            const updateAlert = db.prepare('UPDATE alerts SET status = ? WHERE id = ?');
-            for (const alertId of alertIds) {
-              updateAlert.run('resolved', alertId);
-            }
-          } catch { /* ignore malformed alert_ids */ }
-        }
+    // Update related alert statuses based on decision outcome
+    const decision = db.prepare('SELECT attack_chain_id FROM decisions WHERE id = ?').get(req.params.id);
+    if (decision) {
+      const chain = db.prepare('SELECT alert_ids FROM attack_chains WHERE id = ?').get(decision.attack_chain_id);
+      if (chain && chain.alert_ids) {
+        try {
+          const alertIds = JSON.parse(chain.alert_ids);
+          const updateAlert = db.prepare('UPDATE alerts SET status = ? WHERE id = ?');
+          const newAlertStatus = status === 'accepted' ? 'resolved' : 'analyzed';
+          for (const alertId of alertIds) {
+            updateAlert.run(newAlertStatus, alertId);
+          }
+        } catch { /* ignore malformed alert_ids */ }
       }
     }
 

@@ -157,7 +157,7 @@ def test_chat_maps_auth_and_rate_limit_errors(monkeypatch, test_db_path):
         def __init__(self, error):
             self.error = error
 
-        def create(self, **_kwargs):
+        async def create(self, **_kwargs):
             raise self.error
 
     class FakeClient:
@@ -165,10 +165,10 @@ def test_chat_maps_auth_and_rate_limit_errors(monkeypatch, test_db_path):
             self.chat = type("Chat", (), {"completions": FakeCreate(error)})()
 
     with _make_client(monkeypatch, test_db_path) as client:
-        with patch("agent.service.OpenAI", return_value=FakeClient(Exception("401 unauthorized"))):
+        with patch("agent.service.AsyncOpenAI", return_value=FakeClient(Exception("401 unauthorized"))):
             unauthorized = client.post("/chat", json={"messages": [{"role": "user", "content": "hi"}]})
 
-        with patch("agent.service.OpenAI", return_value=FakeClient(Exception("429 rate limit"))):
+        with patch("agent.service.AsyncOpenAI", return_value=FakeClient(Exception("429 rate limit"))):
             rate_limited = client.post("/chat", json={"messages": [{"role": "user", "content": "hi"}]})
 
     assert unauthorized.status_code == 401

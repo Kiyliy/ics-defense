@@ -106,6 +106,26 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # ----------------------------------------------------------------
+  # Notification Worker
+  # Redis Streams 消费者：监听通知事件，通过飞书/Webhook/邮件发送告警
+  # ----------------------------------------------------------------
+  notification-worker:
+    <<: *app-env
+    image: python:3.11-slim
+    container_name: ics-notification-worker
+    working_dir: /app
+    command: ["python", "-m", "notifier.worker"]
+    environment:
+      REDIS_URL: redis://redis:6379
+      FEISHU_BOT_WEBHOOK_URL: ${FEISHU_BOT_WEBHOOK_URL:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./notifier:/app/notifier
+    restart: unless-stopped
+
 # ----------------------------------------------------------------
 # 共享数据卷
 # SQLite 数据库在 agent-service 和 backend 之间共享
