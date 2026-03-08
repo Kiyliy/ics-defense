@@ -1,34 +1,36 @@
 # ICS Defense
 
-> AI-driven industrial control system (ICS) security analysis and response platform.
+> 面向工控安全场景的 AI 驱动告警分析与响应平台。
 
-ICS Defense is an end-to-end demo platform for multi-source security alert ingestion, correlation analysis, MITRE ATT&CK for ICS mapping, AI-assisted decision-making, audit logging, and approval-based response execution.
+ICS Defense 是一个用于工控安全（ICS Security）场景的端到端演示平台，支持多源安全告警接入、标准化与聚合、MITRE ATT&CK for ICS 映射、AI 分析决策、审计追踪，以及基于审批的响应执行。
 
-It combines:
-- a Python `Agent Service` for plan-and-execute analysis,
-- a Node.js `Backend API` for business APIs and persistence,
-- a Vue 3 `Frontend` for dashboard and analyst workflows,
-- a set of local `MCP tools` for log search, rule matching, memory, notification, and action execution.
+项目由以下核心部分组成：
+- Python `Agent Service`：负责规划式分析、工具调用和结构化决策输出
+- Node.js `Backend API`：负责业务 API、数据落库、审批流与审计查询
+- Vue 3 `Frontend`：负责大屏展示、分析结果查看和运维操作
+- 本地 `MCP tools`：负责日志检索、规则匹配、知识查询、记忆、通知和动作执行
 
-## Features
+English version: [`README_EN.md`](./README_EN.md)
 
-- Multi-source alert ingestion (`waf`, `nids`, `hids`, `pikachu`, `soc`)
-- Alert normalization and clustering
-- MITRE ATT&CK for ICS tactic / technique mapping
-- AI-based planning + tool use + final structured decision generation
-- Structured outputs with strict JSON schema for xAI-compatible models
-- MCP-based local tools:
-  - log search
-  - rule engine
-  - MITRE knowledge base
-  - memory
-  - notifier
-  - action executor
-- Approval queue for high-risk response operations
-- Full audit trail with token usage tracking
-- Docker Compose deployment for the full stack
+## 功能特性
 
-## Architecture
+- 多源告警接入：支持 `waf`、`nids`、`hids`、`pikachu`、`soc`
+- 告警标准化与聚合分析
+- MITRE ATT&CK for ICS 战术 / 技术映射
+- AI 驱动的 Planning + Tool Use + Structured Decision 分析链路
+- 基于严格 JSON Schema 的结构化输出
+- MCP 工具扩展体系：
+  - 日志检索
+  - 关联规则匹配
+  - MITRE 知识库查询
+  - 记忆检索与存储
+  - 通知发送
+  - 响应动作执行
+- 高风险动作审批流
+- 审计日志与 Token 使用量统计
+- 基于 Docker Compose 的整套部署方式
+
+## 架构概览
 
 ```text
 Frontend (Vue 3 + Vite + Nginx)
@@ -50,36 +52,36 @@ Agent Service (FastAPI + xAI/OpenAI-compatible API)
 SQLite / Redis
 ```
 
-## Repository Structure
+## 目录结构
 
 ```text
 .
-├── agent/                # Python agent core, prompts, policies, service
-├── backend/              # Express backend API
-├── frontend/             # Vue 3 frontend
-├── collector/            # Alert normalization / clustering helpers
-├── mcp-servers/          # Local MCP tool servers
-├── tests/                # Python test suite
-├── docker-compose.yml    # Full-stack deployment
+├── agent/                # Python Agent 核心、提示词、策略、服务入口
+├── backend/              # Express 后端 API
+├── frontend/             # Vue 3 前端
+├── collector/            # 告警标准化 / 聚合辅助模块
+├── mcp-servers/          # 本地 MCP 工具服务
+├── tests/                # Python 测试集
+├── docker-compose.yml    # 全栈部署编排
 ├── Dockerfile.agent
 ├── Dockerfile.backend
 ├── Dockerfile.frontend
 └── nginx.conf
 ```
 
-## Tech Stack
+## 技术栈
 
-### Backend / Agent
+### 后端 / Agent
 - Python 3.12
 - FastAPI
-- OpenAI-compatible SDK (`openai`) for xAI access
+- OpenAI-compatible SDK（用于对接 xAI）
 - MCP Python SDK
 - SQLite
 - Redis
 - Node.js + Express
 - better-sqlite3
 
-### Frontend
+### 前端
 - Vue 3
 - Vite
 - Vue Router
@@ -87,13 +89,13 @@ SQLite / Redis
 - ECharts
 - Nginx
 
-## Quick Start
+## 快速开始
 
-### 1. Configure environment
+### 1. 配置环境变量
 
-The project uses `backend/.env` as the shared runtime environment file for Docker Compose.
+当前项目使用 `backend/.env` 作为 Docker Compose 的共享运行时环境文件。
 
-Example:
+示例：
 
 ```env
 PORT=3002
@@ -103,18 +105,18 @@ XAI_MODEL=grok-3-mini-fast
 DB_PATH=./data/ics-defense.db
 ```
 
-For Docker Compose, the most important variables are:
+Docker Compose 启动时最关键的变量有：
 - `XAI_API_KEY`
 - `XAI_BASE_URL`
 - `XAI_MODEL`
 
-Optional host port overrides can be supplied when starting Compose:
+如果宿主机端口冲突，也可以在启动时覆盖：
 - `REDIS_PORT`
 - `AGENT_SERVICE_PORT`
 - `BACKEND_PORT`
 - `FRONTEND_PORT`
 
-### 2. Start with Docker Compose
+### 2. 使用 Docker Compose 启动
 
 ```bash
 REDIS_PORT=6379 \
@@ -124,7 +126,7 @@ FRONTEND_PORT=80 \
 docker compose up -d --build
 ```
 
-### 3. Verify services
+### 3. 健康检查
 
 ```bash
 curl http://localhost:8000/status
@@ -132,49 +134,49 @@ curl http://localhost:3000/api/health
 curl http://localhost/api/health
 ```
 
-## Docker Compose Topology
+## Docker Compose 结构说明
 
-Current Compose structure:
+当前 Compose 结构如下：
 
 - `redis`
-  - Redis Streams / shared queue support
+  - Redis Streams / 缓冲与消息能力
 - `agent-service`
-  - FastAPI-based AI analysis service
-  - connects to xAI-compatible API
-  - starts MCP servers via stdio
+  - FastAPI AI 分析服务
+  - 对接 xAI 兼容接口
+  - 通过 stdio 启动本地 MCP 工具
 - `backend`
-  - Express API
-  - persists alerts, decisions, audit logs, attack chains
-  - proxies analysis requests to `agent-service`
+  - Express 业务 API
+  - 负责告警、审批、审计、攻击链与处置建议持久化
+  - 向 `agent-service` 发起分析请求
 - `frontend`
-  - Nginx-served production frontend
-  - proxies `/api` requests to `backend`
+  - Nginx 托管前端静态资源
+  - 将 `/api` 代理到 `backend`
 
-### Why this structure is good
+### 当前结构的优点
 
-- Clear separation of responsibilities
-- Agent and business API are decoupled
-- Frontend stays stateless and easy to deploy
-- SQLite is shared between `backend` and `agent-service`
-- MCP tools remain local to the agent instead of becoming extra containers
+- 职责边界清晰
+- Agent 与业务 API 解耦
+- 前端保持无状态，部署简单
+- `backend` 与 `agent-service` 共享 SQLite 数据
+- MCP 工具内聚在 Agent 侧，结构直观，适合演示与论文项目
 
-### Current trade-offs
+### 当前结构的取舍
 
-- SQLite is simple and portable, but not ideal for high concurrency
-- MCP tools live inside the agent container, which is simple but less independently scalable
-- Frontend is production-oriented in Compose; live dev workflow still fits better outside Compose
+- SQLite 简单易用，但高并发场景不是最优解
+- MCP 工具和 Agent 放在一个容器内，部署简单，但横向扩展灵活性一般
+- Compose 更偏生产演示；前端热更新开发仍然更适合本地直跑
 
-### Recommended future evolution
+### 推荐的后续演进方向
 
-If the project grows, a natural next step would be:
-- keep `frontend`, `backend`, `agent-service`, `redis`
-- move SQLite to PostgreSQL
-- optionally split high-value MCP tools into standalone services
-- add `docker-compose.override.yml` for local dev ergonomics
+如果项目继续扩展，比较自然的升级路线是：
+- 保持 `frontend`、`backend`、`agent-service`、`redis` 四层结构
+- 把 SQLite 升级到 PostgreSQL
+- 将高价值 MCP 工具拆分成独立服务
+- 为本地开发增加 `docker-compose.override.yml`
 
-## Main Workflows
+## 主要工作流
 
-### Alert Ingestion
+### 告警接入
 
 ```bash
 curl -X POST http://localhost:3000/api/alerts/ingest \
@@ -193,7 +195,7 @@ curl -X POST http://localhost:3000/api/alerts/ingest \
   }'
 ```
 
-### Trigger AI Analysis
+### 触发 AI 分析
 
 ```bash
 curl -X POST http://localhost:3000/api/analysis/alerts \
@@ -201,35 +203,35 @@ curl -X POST http://localhost:3000/api/analysis/alerts \
   -d '{"alert_ids": [1,2,3]}'
 ```
 
-### Poll Analysis Result
+### 轮询分析结果
 
 ```bash
 curl http://localhost:8000/analyze/<trace_id>
 ```
 
-### Query Attack Chains
+### 查询攻击链
 
 ```bash
 curl http://localhost:3000/api/analysis/chains
 ```
 
-## Structured Output Design
+## 结构化输出设计
 
-This project uses strict structured outputs for AI analysis.
+本项目的 AI 分析链路默认采用严格结构化输出。
 
-Key points:
-- planning output is schema-constrained JSON
-- final decision output is schema-constrained JSON
-- fallback text parsing is kept only as a last resort
-- this avoids fragile extraction from Markdown code blocks
+核心设计点：
+- 规划阶段输出受 JSON Schema 约束
+- 最终结论输出受 JSON Schema 约束
+- 旧式文本/Markdown 提取仅保留为兜底逻辑
+- 避免依赖从 Markdown code block 中抠 JSON 的脆弱方案
 
-This design improves reliability for:
-- automation
-- auditability
-- downstream persistence
-- UI rendering
+这种设计对以下场景更稳定：
+- 自动化流程编排
+- 审计与追踪
+- 数据库存储
+- 前端结果渲染
 
-## Key API Endpoints
+## 主要 API
 
 ### Backend
 - `GET /api/health`
@@ -250,7 +252,7 @@ This design improves reliability for:
 - `POST /chat`
 - `POST /approval/{approval_id}/respond`
 
-## Development
+## 本地开发
 
 ### Backend
 
@@ -274,43 +276,43 @@ npm run dev
 python3 -m uvicorn agent.service:app --host 0.0.0.0 --port 8000
 ```
 
-## Testing
+## 测试
 
-Python tests:
+Python 测试：
 
 ```bash
 pytest
 ```
 
-Compose config validation:
+Compose 配置校验：
 
 ```bash
 docker compose config
 ```
 
-## Security Notes
+## 安全说明
 
-- Do **not** commit real secrets
-- `backend/.env` is ignored by Git
-- High-risk actions should stay approval-gated
-- If publishing this project publicly, rotate any previously exposed credentials before sharing
+- 不要提交真实密钥
+- `backend/.env` 已被 Git 忽略
+- 高风险动作应始终保留审批机制
+- 如果已经公开过真实凭证，建议在正式开源前立即轮换密钥
 
 ## Roadmap
 
-- Replace SQLite with PostgreSQL for multi-user concurrency
-- Add browser-based e2e tests
-- Improve frontend bundle splitting
-- Add richer attack chain visualization
-- Add dev-specific Compose overrides
-- Add CI for linting, tests, and image builds
+- 将 SQLite 升级为 PostgreSQL
+- 增加浏览器端 e2e 测试
+- 优化前端构建产物拆包
+- 增强攻击链可视化效果
+- 增加开发环境专用的 Compose 覆盖配置
+- 接入 CI 做测试、构建与镜像校验
 
-## License
+## 许可证
 
-Add your preferred open-source license here.
+请根据你的开源发布计划补充正式 License。
 
-## Acknowledgements
+## 致谢
 
-Built around:
+本项目构建于以下基础之上：
 - FastAPI
 - Express
 - Vue 3
