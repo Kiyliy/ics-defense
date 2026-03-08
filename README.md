@@ -233,6 +233,8 @@ curl -X POST http://localhost:3000/api/notifications/test \
   }'
 ```
 
+返回 `202 Accepted` 代表消息已写入 Redis Streams，随后由 `ics-notification-worker` 异步消费并发送到飞书。
+
 ### 发送告警到飞书机器人
 
 ```bash
@@ -286,9 +288,9 @@ curl -X POST http://localhost:3000/api/notifications/alerts/1/send \
 ### PM2 管理约定
 
 - 当前开发环境中的后端服务由 `PM2` 管理，进程名为 `ics-backend`
-- 修改 `backend/.env` 或后端代码后，优先执行 `pm2 restart ics-backend`
+- 修改 `backend/.env` 或后端代码后，优先执行 `pm2 restart ics-backend --update-env`
 - 不要额外手工启动新的 `node src/server.js` 实例，避免端口 `3002` 冲突
-- 常用检查命令：`pm2 list`、`pm2 describe ics-backend`、`pm2 logs ics-backend --lines 100`
+- 常用检查命令：`pm2 list`、`pm2 describe ics-backend`、`pm2 logs ics-backend --lines 100`、`pm2 logs ics-notification-worker --lines 100`
 
 ### Backend
 
@@ -296,6 +298,22 @@ curl -X POST http://localhost:3000/api/notifications/alerts/1/send \
 cd backend
 npm install
 npm run dev
+```
+
+### Notification Worker
+
+```bash
+cd backend
+npm run worker:notifications
+```
+
+### PM2（推荐）
+
+```bash
+cd backend
+pm2 start ecosystem.config.cjs --only ics-notification-worker
+pm2 restart ics-backend --update-env
+pm2 restart ics-notification-worker --update-env
 ```
 
 ### Frontend
