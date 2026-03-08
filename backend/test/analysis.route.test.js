@@ -85,6 +85,50 @@ describe('analysis routes', () => {
     });
   });
 
+  it('analysis agent status proxies backend request', async () => {
+    const mockFetch = async (url, options) => {
+      expect(String(url)).toMatch(/\/status$/);
+      expect(options.method).toBe('GET');
+      expect(options.headers).toEqual({ Accept: 'application/json' });
+      return {
+        ok: true,
+        async json() {
+          return { status: 'ok', mcp_connected: true, mcp_servers: ['memory'], running_tasks: 2 };
+        },
+      };
+    };
+
+    await withTestServer(async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/api/analysis/agent/status`);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        status: 'ok',
+        mcp_connected: true,
+        mcp_servers: ['memory'],
+        running_tasks: 2,
+      });
+    }, createAnalysisRouter({ fetchFn: mockFetch }));
+  });
+
+  it('analysis agent status returns 503 when upstream agent is unavailable', async () => {
+    const mockFetch = async () => ({
+      ok: false,
+      status: 503,
+      async text() {
+        return 'agent down';
+      },
+    });
+
+    await withTestServer(async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/api/analysis/agent/status`);
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({
+        error: 'Agent status unavailable',
+        detail: 'Agent Service returned 503: agent down',
+      });
+    }, createAnalysisRouter({ fetchFn: mockFetch }));
+  });
+
   it('analysis alerts delegates to agent service and updates alert statuses', async () => {
     const mockFetch = async (url, options) => {
       expect(String(url)).toMatch(/\/analyze$/);

@@ -25,7 +25,6 @@ beforeEach(() => {
   httpClient.get.mockReset()
   httpClient.post.mockReset()
   httpClient.patch.mockReset()
-  vi.unstubAllGlobals()
 })
 
 describe('frontend api client', () => {
@@ -49,6 +48,9 @@ describe('frontend api client', () => {
 
     expect(await api.getBackendHealth()).toBe('get-ok')
     expect(httpClient.get).toHaveBeenLastCalledWith('/health')
+
+    expect(await api.getAgentStatus()).toBe('get-ok')
+    expect(httpClient.get).toHaveBeenLastCalledWith('/analysis/agent/status')
 
     expect(await api.getAlerts({ severity: 'high' })).toBe('get-ok')
     expect(httpClient.get).toHaveBeenLastCalledWith('/alerts', { params: { severity: 'high' } })
@@ -79,28 +81,5 @@ describe('frontend api client', () => {
 
     expect(await api.getAuditStats()).toBe('get-ok')
     expect(httpClient.get).toHaveBeenLastCalledWith('/audit/stats', { params: {} })
-  })
-
-  it('fetches agent status via fetch and rejects non-ok responses', async () => {
-    const fetchImpl = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: vi.fn().mockResolvedValue({ status: 'ok', running_tasks: 1 }),
-      })
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 503,
-      })
-
-    await expect(api.getAgentStatus({ url: 'http://agent.local/status', fetchImpl }))
-      .resolves.toEqual({ status: 'ok', running_tasks: 1 })
-
-    expect(fetchImpl).toHaveBeenNthCalledWith(1, 'http://agent.local/status', {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-    })
-
-    await expect(api.getAgentStatus({ url: 'http://agent.local/status', fetchImpl }))
-      .rejects.toThrow('Agent status request failed with 503')
   })
 })
