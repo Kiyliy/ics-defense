@@ -1,16 +1,44 @@
+// @ts-check
+
 import { Router } from 'express';
 import { analyzeAlerts, chat } from '../services/llm.js';
-
-const router = Router();
 
 const AGENT_SERVICE_URL = process.env.AGENT_SERVICE_URL || 'http://localhost:8000';
 
 /**
+ * @typedef {{ trace_id: string, status?: string, message?: string }} AgentServiceResponse
+ */
+
+/**
+ * @typedef {{
+ *   analysis?: string
+ *   mitre_tactic?: string
+ *   mitre_technique?: string
+ *   risk_level?: string
+ *   confidence?: number
+ *   recommendation?: string
+ *   action_type?: string
+ *   rationale?: string
+ * }} LLMAnalysisResult
+ */
+
+/**
+ * @param {unknown} error
+ * @returns {string}
+ */
+function getErrorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
  * 调用 Python Agent Service 进行分析
  * 返回 trace_id 供前端轮询进度
+ * @param {number[]} alertIds
+ * @param {{ fetchFn?: typeof fetch, agentServiceUrl?: string }} [options]
+ * @returns {Promise<AgentServiceResponse>}
  */
-async function callAgentService(alertIds) {
-  const resp = await fetch(`${AGENT_SERVICE_URL}/analyze`, {
+async function callAgentService(alertIds, { fetchFn = fetch, agentServiceUrl = AGENT_SERVICE_URL } = {}) {
+  const resp = await fetchFn(`${agentServiceUrl}/analyze`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ alert_ids: alertIds }),
@@ -18,14 +46,18 @@ async function callAgentService(alertIds) {
   if (!resp.ok) {
     throw new Error(`Agent Service returned ${resp.status}: ${await resp.text()}`);
   }
-  return resp.json();
+  return /** @type {Promise<AgentServiceResponse>} */ (resp.json());
 }
 
 /**
  * 直接调用 LLM 分析（fallback）
+ * @param {any} db
+ * @param {unknown[]} alerts
+ * @param {number[]} alertIds
+ * @param {{ analyzeAlertsFn?: typeof analyzeAlerts }} [options]
  */
-async function analyzeWithLLM(db, alerts, alertIds) {
-  const result = await analyzeAlerts(alerts);
+async function analyzeWithLLM(db, alerts, alertIds, { analyzeAlertsFn = analyzeAlerts } = {}) {
+  const result = /** @type {LLMAnalysisResult} */ (await analyzeAlertsFn(alerts));
 
   // 存攻击链
   const chainInsert = db.prepare(`
@@ -71,48 +103,53 @@ async function analyzeWithLLM(db, alerts, alertIds) {
  *
  * Body: { alert_ids: [1, 2, 3] }
  */
-router.post('/alerts', async (req, res) => {
-  const { alert_ids } = req.body;
-  if (!Array.isArray(alert_ids) || alert_ids.length === 0) {
-    return res.status(400).json({ error: 'alert_ids[] required' });
-  }
+export function createAnalysisRouter({
+  fetchFn = fetch,
+  analyzeAlertsFn = analyzeAlerts,
+  chatFn = chat,
+  agentServiceUrl = AGENT_SERVICE_URL,
+} = {}) {
+  const router = Router();
 
-  const db = req.db;
-  const placeholders = alert_ids.map(() => '?').join(',');
-  const alerts = db.prepare(`SELECT * FROM alerts WHERE id IN (${placeholders})`).all(...alert_ids);
-
-  if (alerts.length === 0) {
-    return res.status(404).json({ error: 'No alerts found' });
-  }
-
-  // 优先调用 Agent Service
-  try {
-    const agentResult = await callAgentService(alert_ids);
-
-    // 更新告警状态为 analyzing
-    const updateStatus = db.prepare('UPDATE alerts SET status = ? WHERE id = ?');
-    for (const id of alert_ids) {
-      updateStatus.run('analyzing', id);
+  router.post('/alerts', async (/** @type {any} */ req, /** @type {any} */ res) => {
+    const { alert_ids } = req.body;
+    if (!Array.isArray(alert_ids) || alert_ids.length === 0) {
+      return res.status(400).json({ error: 'alert_ids[] required' });
     }
 
-    return res.json({
-      trace_id: agentResult.trace_id,
-      status: 'analyzing',
-      message: 'Analysis delegated to Agent Service',
-    });
-  } catch (agentErr) {
-    console.warn('Agent Service unavailable, falling back to direct LLM:', agentErr.message);
-  }
+    const db = req.db;
+    const placeholders = alert_ids.map(() => '?').join(',');
+    const alerts = db.prepare(`SELECT * FROM alerts WHERE id IN (${placeholders})`).all(...alert_ids);
 
-  // Fallback: 直接调用 LLM
-  try {
-    const result = await analyzeWithLLM(db, alerts, alert_ids);
-    res.json(result);
-  } catch (err) {
-    console.error('LLM analysis failed:', err.message);
-    res.status(500).json({ error: 'AI analysis failed', detail: err.message });
-  }
-});
+    if (alerts.length === 0) {
+      return res.status(404).json({ error: 'No alerts found' });
+    }
+
+    try {
+      const agentResult = await callAgentService(alert_ids, { fetchFn, agentServiceUrl });
+      const updateStatus = db.prepare('UPDATE alerts SET status = ? WHERE id = ?');
+      for (const id of alert_ids) {
+        updateStatus.run('analyzing', id);
+      }
+
+      return res.json({
+        trace_id: agentResult.trace_id,
+        status: 'analyzing',
+        message: 'Analysis delegated to Agent Service',
+      });
+    } catch (agentErr) {
+      console.warn('Agent Service unavailable, falling back to direct LLM:', getErrorMessage(agentErr));
+    }
+
+    try {
+      const result = await analyzeWithLLM(db, alerts, alert_ids, { analyzeAlertsFn });
+      res.json(result);
+    } catch (err) {
+      const message = getErrorMessage(err);
+      console.error('LLM analysis failed:', message);
+      res.status(500).json({ error: 'AI analysis failed', detail: message });
+    }
+  });
 
 /**
  * POST /api/analysis/chat
@@ -120,46 +157,50 @@ router.post('/alerts', async (req, res) => {
  *
  * Body: { messages: [{ role: 'user', content: '...' }] }
  */
-router.post('/chat', async (req, res) => {
-  const { messages } = req.body;
-  if (!Array.isArray(messages)) {
-    return res.status(400).json({ error: 'messages[] required' });
-  }
-  try {
-    const reply = await chat(messages);
-    res.json({ reply });
-  } catch (err) {
-    console.error('Chat failed:', err.message);
-    res.status(500).json({ error: 'Chat failed', detail: err.message });
-  }
-});
+  router.post('/chat', async (/** @type {any} */ req, /** @type {any} */ res) => {
+    const { messages } = req.body;
+    if (!Array.isArray(messages)) {
+      return res.status(400).json({ error: 'messages[] required' });
+    }
+    try {
+      const reply = await chatFn(messages);
+      res.json({ reply });
+    } catch (err) {
+      const message = getErrorMessage(err);
+      console.error('Chat failed:', message);
+      res.status(500).json({ error: 'Chat failed', detail: message });
+    }
+  });
 
 /**
  * GET /api/analysis/chains
  * 查询攻击链列表
  */
-router.get('/chains', (req, res) => {
-  const chains = req.db.prepare(`
-    SELECT c.*, d.risk_level, d.recommendation, d.action_type
-    FROM attack_chains c
-    LEFT JOIN decisions d ON d.attack_chain_id = c.id
-    ORDER BY c.created_at DESC
-    LIMIT 50
-  `).all();
-  res.json({ chains });
-});
+  router.get('/chains', (/** @type {any} */ req, /** @type {any} */ res) => {
+    const chains = req.db.prepare(`
+      SELECT c.*, d.risk_level, d.recommendation, d.action_type
+      FROM attack_chains c
+      LEFT JOIN decisions d ON d.attack_chain_id = c.id
+      ORDER BY c.created_at DESC
+      LIMIT 50
+    `).all();
+    res.json({ chains });
+  });
 
 /**
  * PATCH /api/analysis/decisions/:id
  * 人工反馈：接受或拒绝处置建议
  */
-router.patch('/decisions/:id', (req, res) => {
-  const { status } = req.body;
-  if (!['accepted', 'rejected'].includes(status)) {
-    return res.status(400).json({ error: 'status must be accepted or rejected' });
-  }
-  const result = req.db.prepare('UPDATE decisions SET status = ? WHERE id = ?').run(status, req.params.id);
-  res.json({ updated: result.changes > 0 });
-});
+  router.patch('/decisions/:id', (/** @type {any} */ req, /** @type {any} */ res) => {
+    const { status } = req.body;
+    if (!['accepted', 'rejected'].includes(status)) {
+      return res.status(400).json({ error: 'status must be accepted or rejected' });
+    }
+    const result = req.db.prepare('UPDATE decisions SET status = ? WHERE id = ?').run(status, req.params.id);
+    res.json({ updated: result.changes > 0 });
+  });
 
-export default router;
+  return router;
+}
+
+export default createAnalysisRouter();

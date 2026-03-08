@@ -70,6 +70,18 @@ router.get('/', (req, res) => {
 });
 
 /**
+ * GET /api/alerts/:id
+ * 查询单条告警详情
+ */
+router.get('/:id', (req, res) => {
+  const alert = req.db.prepare('SELECT * FROM alerts WHERE id = ?').get(req.params.id);
+  if (!alert) {
+    return res.status(404).json({ error: 'Alert not found' });
+  }
+  res.json(alert);
+});
+
+/**
  * PATCH /api/alerts/:id/status
  * 更新告警状态（人工反馈闭环）
  */

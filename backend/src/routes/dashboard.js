@@ -53,6 +53,21 @@ router.get('/stats', (req, res) => {
 });
 
 /**
+ * GET /api/dashboard/trend
+ * 最近7天告警趋势
+ */
+router.get('/trend', (req, res) => {
+  const trend = req.db.prepare(`
+    SELECT date(created_at) as date, COUNT(*) as count
+    FROM alerts
+    WHERE created_at >= date('now', '-7 days')
+    GROUP BY date(created_at)
+    ORDER BY date ASC
+  `).all();
+  res.json({ trend });
+});
+
+/**
  * GET /api/dashboard/assets
  * 资产列表
  */
