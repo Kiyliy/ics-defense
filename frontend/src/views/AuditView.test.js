@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { withUiGlobal } from '../test-utils/ui.js'
 
 const apiMocks = vi.hoisted(() => ({
   getAuditLogs: vi.fn(),
@@ -17,26 +18,7 @@ vi.mock('vue-router', () => ({ useRoute: () => routeState }))
 import AuditView from './AuditView.vue'
 
 describe('AuditView', () => {
-  const stubs = {
-    'el-card': { template: '<div><slot /><slot name="header" /></div>' },
-    'el-form': { template: '<form><slot /></form>' },
-    'el-form-item': { template: '<div><slot /></div>' },
-    'el-input': { template: '<input />' },
-    'el-select': { template: '<select><slot /></select>' },
-    'el-option': { template: '<option><slot /></option>' },
-    'el-button': { template: '<button><slot /></button>' },
-    'el-icon': { template: '<span><slot /></span>' },
-    'el-row': { template: '<div><slot /></div>' },
-    'el-col': { template: '<div><slot /></div>' },
-    'el-collapse': { template: '<div><slot /></div>' },
-    'el-collapse-item': { template: '<div><slot /><slot name="title" /></div>' },
-    'el-table': { template: '<div><slot /></div>' },
-    'el-table-column': true,
-    'el-popover': { template: '<div><slot /><slot name="reference" /></div>' },
-    'el-tag': { template: '<span><slot /></span>' },
-    'el-empty': { template: '<div><slot /></div>' },
-    Search: { template: '<i />' },
-  }
+
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -55,7 +37,7 @@ describe('AuditView', () => {
   })
 
   it('loads logs and stats on mount', async () => {
-    const wrapper = mount(AuditView, { global: { stubs } })
+    const wrapper = mount(AuditView, withUiGlobal())
     await flushPromises()
 
     expect(apiMocks.getAuditLogs).toHaveBeenCalledWith({})
@@ -65,7 +47,7 @@ describe('AuditView', () => {
 
   it('initializes filters from route query', async () => {
     routeState.query = { trace_id: 'trace-route', days: '3' }
-    const wrapper = mount(AuditView, { global: { stubs } })
+    const wrapper = mount(AuditView, withUiGlobal())
     await flushPromises()
 
     expect(wrapper.vm.filters.trace_id).toBe('trace-route')
@@ -82,7 +64,7 @@ describe('AuditView', () => {
         { trace_id: 'trace-old', created_at: oldDate, event_type: 'plan', data: {} },
       ],
     })
-    const wrapper = mount(AuditView, { global: { stubs } })
+    const wrapper = mount(AuditView, withUiGlobal())
     await flushPromises()
 
     wrapper.vm.filters.trace_id = 'trace-new'
@@ -95,7 +77,7 @@ describe('AuditView', () => {
   })
 
   it('handleReset restores defaults and refetches data', async () => {
-    const wrapper = mount(AuditView, { global: { stubs } })
+    const wrapper = mount(AuditView, withUiGlobal())
     await flushPromises()
 
     wrapper.vm.filters = { trace_id: 'abc', days: 30 }
@@ -111,7 +93,7 @@ describe('AuditView', () => {
     apiMocks.getAuditStats.mockRejectedValueOnce(new Error('stats failed'))
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-    mount(AuditView, { global: { stubs } })
+    mount(AuditView, withUiGlobal())
     await flushPromises()
 
     expect(errorSpy).toHaveBeenCalled()
@@ -119,7 +101,7 @@ describe('AuditView', () => {
   })
 
   it('formats and truncates data safely', async () => {
-    const wrapper = mount(AuditView, { global: { stubs } })
+    const wrapper = mount(AuditView, withUiGlobal())
     await flushPromises()
 
     expect(wrapper.vm.eventTypeColor('error')).toBe('danger')

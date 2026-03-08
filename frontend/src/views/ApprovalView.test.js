@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { withUiGlobal } from '../test-utils/ui.js'
 
 const apiMocks = vi.hoisted(() => ({
   getApprovals: vi.fn(),
@@ -27,20 +28,7 @@ vi.mock('element-plus', async () => {
 import ApprovalView from './ApprovalView.vue'
 
 describe('ApprovalView', () => {
-  const stubs = {
-    'el-card': { template: '<div><slot /><slot name="header" /></div>' },
-    'el-tabs': { template: '<div><slot /></div>' },
-    'el-tab-pane': { template: '<div><slot /></div>' },
-    'el-table': { template: '<div><slot /></div>' },
-    'el-table-column': true,
-    'el-popover': { template: '<div><slot /><slot name="reference" /></div>' },
-    'el-tag': { template: '<span><slot /></span>' },
-    'el-button': { template: '<button><slot /></button>' },
-    'el-dialog': { template: '<div><slot /><slot name="footer" /></div>' },
-    'el-form': { template: '<form><slot /></form>' },
-    'el-form-item': { template: '<div><slot /></div>' },
-    'el-input': { template: '<input />' },
-  }
+
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -54,7 +42,7 @@ describe('ApprovalView', () => {
   })
 
   it('loads pending approvals on mount', async () => {
-    const wrapper = mount(ApprovalView, { global: { stubs } })
+    const wrapper = mount(ApprovalView, withUiGlobal())
     await flushPromises()
 
     expect(apiMocks.getApprovals).toHaveBeenCalledWith({ status: 'pending' })
@@ -62,7 +50,7 @@ describe('ApprovalView', () => {
   })
 
   it('switches to all tab and fetches without status filter', async () => {
-    const wrapper = mount(ApprovalView, { global: { stubs } })
+    const wrapper = mount(ApprovalView, withUiGlobal())
     await flushPromises()
 
     wrapper.vm.activeTab = 'all'
@@ -72,7 +60,7 @@ describe('ApprovalView', () => {
   })
 
   it('approves item after confirmation and refreshes list', async () => {
-    const wrapper = mount(ApprovalView, { global: { stubs } })
+    const wrapper = mount(ApprovalView, withUiGlobal())
     await flushPromises()
 
     await wrapper.vm.handleApprove({ id: 7, tool_name: 'block_ip' })
@@ -85,7 +73,7 @@ describe('ApprovalView', () => {
 
   it('ignores user-cancelled approval confirmation', async () => {
     confirmMock.mockRejectedValueOnce('cancel')
-    const wrapper = mount(ApprovalView, { global: { stubs } })
+    const wrapper = mount(ApprovalView, withUiGlobal())
     await flushPromises()
 
     await wrapper.vm.handleApprove({ id: 7, tool_name: 'block_ip' })
@@ -96,7 +84,7 @@ describe('ApprovalView', () => {
 
   it('shows error when approval request fails', async () => {
     apiMocks.respondApproval.mockRejectedValueOnce(new Error('approve failed'))
-    const wrapper = mount(ApprovalView, { global: { stubs } })
+    const wrapper = mount(ApprovalView, withUiGlobal())
     await flushPromises()
 
     await wrapper.vm.handleApprove({ id: 7, tool_name: 'block_ip' })
@@ -105,7 +93,7 @@ describe('ApprovalView', () => {
   })
 
   it('opens reject dialog and submits rejection reason', async () => {
-    const wrapper = mount(ApprovalView, { global: { stubs } })
+    const wrapper = mount(ApprovalView, withUiGlobal())
     await flushPromises()
 
     wrapper.vm.handleReject({ id: 8, tool_name: 'shutdown_plc' })
@@ -121,7 +109,7 @@ describe('ApprovalView', () => {
 
   it('shows error when rejection fails', async () => {
     apiMocks.respondApproval.mockRejectedValueOnce(new Error('reject failed'))
-    const wrapper = mount(ApprovalView, { global: { stubs } })
+    const wrapper = mount(ApprovalView, withUiGlobal())
     await flushPromises()
 
     wrapper.vm.handleReject({ id: 8, tool_name: 'shutdown_plc' })
