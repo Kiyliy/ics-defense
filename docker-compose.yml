@@ -1,14 +1,13 @@
 # ICS 安全防御平台 - Docker Compose 编排配置
-# 包含: Redis消息队列、Python Agent服务、Node.js后端、Vue3前端
+# 包含: Redis消息队列、Python后端(FastAPI)、Vue3前端
 #
-# 环境变量统一管理说明：
-# - 公共 LLM 变量放在 backend/.env，由 compose 通过 env_file 注入
-# - 容器内服务地址/端口在 compose 的 environment 中覆盖
-
+# 环境变量:
+#   公共变量放在 .env 文件，由 compose 通过 env_file 注入。
+#   config.yaml 为配置主源，环境变量可覆盖其中的值。
 
 x-app-env: &app-env
   env_file:
-    - ./backend/.env
+    - ./.env
 
 services:
   # ----------------------------------------------------------------
@@ -31,39 +30,9 @@ services:
       retries: 3
 
   # ----------------------------------------------------------------
-  # Python FastAPI Agent Service
-  # 核心 AI 分析引擎：接收告警 → Plan & Execute → 输出决策
+  # Python FastAPI Backend (formerly agent-service)
+  # 核心 AI 分析引擎 + RESTful API：告警管理、分析、审批流、审计日志
   # MCP Server 由 Agent 通过 stdio 启动，不需要单独容器
-  # ----------------------------------------------------------------
-  agent-service:
-    <<: *app-env
-    build:
-      context: .
-      dockerfile: Dockerfile.agent
-    container_name: ics-agent-service
-    ports:
-      - "${AGENT_SERVICE_PORT:-8000}:8000"
-    environment:
-      DB_PATH: /app/data/ics-defense.db
-      REDIS_URL: redis://redis:6379
-      MCP_CONFIG_PATH: /app/agent/mcp_servers.yaml
-      ICS_DB_PATH: /app/data/ics-defense.db
-    depends_on:
-      redis:
-        condition: service_healthy
-    volumes:
-      - ics-data:/app/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/status')"]
-      interval: 15s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-
-  # ----------------------------------------------------------------
-  # Node.js Express 后端
-  # RESTful API：告警管理、攻击链查看、审批流、审计日志
   # ----------------------------------------------------------------
   backend:
     <<: *app-env
@@ -72,19 +41,21 @@ services:
       dockerfile: Dockerfile.backend
     container_name: ics-backend
     ports:
-      - "${BACKEND_PORT:-3000}:3000"
+      - "${PORT:-8002}:8002"
     environment:
-      DB_PATH: /app/data/ics-defense.db
-      AGENT_SERVICE_URL: http://agent-service:8000
-      PORT: 3000
+      DB_PATH: /app/data/ics_defense.db
+      REDIS_URL: redis://redis:6379
+      MCP_CONFIG_PATH: /app/agent/mcp_servers.yaml
+      PORT: 8002
     depends_on:
-      agent-service:
+      redis:
         condition: service_healthy
     volumes:
       - ics-data:/app/data
+      - ./config.yaml:/app/config.yaml:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>{if(!r.ok)throw 1})"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/status')"]
       interval: 15s
       timeout: 10s
       retries: 3
@@ -128,7 +99,6 @@ services:
 
 # ----------------------------------------------------------------
 # 共享数据卷
-# SQLite 数据库在 agent-service 和 backend 之间共享
 # ----------------------------------------------------------------
 volumes:
   redis-data:
