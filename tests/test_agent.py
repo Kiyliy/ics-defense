@@ -275,7 +275,7 @@ async def test_approval_flow(sample_alerts, mock_mcp, db_path):
     with patch("agent.agent.OpenAI", return_value=mock_client_instance), \
          patch("agent.agent.ToolPolicy") as MockPolicy, \
          patch("agent.agent.HookManager") as MockHooks, \
-         patch("agent.agent.wait_for_approval", side_effect=_mock_wait_approval):
+         patch("agent.executor.wait_for_approval", side_effect=_mock_wait_approval):
 
         mock_policy = MagicMock()
         mock_policy.get_level.return_value = "approve"

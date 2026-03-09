@@ -15,6 +15,7 @@ import sqlite3
 import time
 from typing import Optional
 
+from agent.db import init_db, get_db
 from collector.normalizer import normalize, NormalizedAlert
 from collector.clusterer import AlertClusterer, ClusteredAlert
 from collector.severity_filter import SeverityFilter
@@ -23,36 +24,8 @@ from collector.producer import AlertProducer
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# 数据库 Schema（与 backend/src/models/db.js 保持一致）
+# 数据库 Schema — 使用 agent.db 统一数据层
 # ---------------------------------------------------------------------------
-_ENSURE_TABLES_SQL = """
-CREATE TABLE IF NOT EXISTS raw_events (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    source      TEXT NOT NULL,
-    raw_json    TEXT NOT NULL,
-    received_at TEXT DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS alerts (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    source          TEXT NOT NULL,
-    severity        TEXT DEFAULT 'medium',
-    title           TEXT NOT NULL,
-    description     TEXT,
-    src_ip          TEXT,
-    dst_ip          TEXT,
-    mitre_tactic    TEXT,
-    mitre_technique TEXT,
-    asset_id        INTEGER REFERENCES assets(id),
-    status          TEXT DEFAULT 'open',
-    raw_event_id    INTEGER REFERENCES raw_events(id),
-    created_at      TEXT DEFAULT (datetime('now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_alerts_status   ON alerts(status);
-CREATE INDEX IF NOT EXISTS idx_alerts_severity ON alerts(severity);
-CREATE INDEX IF NOT EXISTS idx_alerts_created  ON alerts(created_at);
-"""
 
 # ---------------------------------------------------------------------------
 # 默认配置
@@ -124,10 +97,12 @@ class Pipeline:
     @staticmethod
     def _init_db(db_path: str) -> sqlite3.Connection:
         """初始化 SQLite 连接并确保所需表存在。"""
-        conn = sqlite3.connect(db_path)
+        # Use the unified data layer to create all tables
+        init_db(db_path)
+        conn = sqlite3.connect(db_path, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
-        conn.executescript(_ENSURE_TABLES_SQL)
+        conn.execute("PRAGMA foreign_keys=ON")
         return conn
 
     def _store_raw_event(self, source: str, raw: dict) -> int:

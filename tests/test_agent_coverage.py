@@ -4,12 +4,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 from agent import agent as agent_module
+from agent import planning as planning_module
 
 
 def test_load_prompts_fall_back_when_files_are_missing(tmp_path: Path):
-    with patch.object(agent_module, '_PROMPT_DIR', tmp_path):
-        assert '工控安全分析 Agent' in agent_module._load_system_prompt()
-        assert 'JSON' in agent_module._load_planning_system_prompt()
+    with patch.object(planning_module, '_PROMPT_DIR', tmp_path):
+        assert '工控安全分析 Agent' in planning_module._load_system_prompt()
+        assert 'JSON' in planning_module._load_planning_system_prompt()
 
 
 def test_parse_decision_extracts_json_from_markdown_code_block():
