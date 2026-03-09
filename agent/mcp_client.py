@@ -174,7 +174,7 @@ def create_client_from_config(config_path: str = "agent/mcp_servers.yaml") -> MC
         command: python
         args: ["mcp-servers/log-search/server.py"]
         env:
-          ICS_DB_PATH: "backend/data/ics-defense.db"
+          ICS_DB_PATH: "backend/data/ics_defense.db"
     """
     import yaml
     with open(config_path) as f:
