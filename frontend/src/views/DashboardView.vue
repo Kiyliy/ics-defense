@@ -1,7 +1,6 @@
 <template>
   <div>
-    <h1 class="page-title">仪表盘</h1>
-    <p class="page-subtitle">聚合风险告警、处置待办、攻击链与趋势分析</p>
+    <PageBanner title="仪表盘" subtitle="聚合风险告警、处置待办、攻击链与趋势分析" />
 
     <div class="stats-grid">
       <StatCard v-for="card in statCards" :key="card.label" v-bind="card" />
@@ -18,6 +17,7 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import PageBanner from '../components/layout/PageBanner.vue'
 import StatCard from '../components/StatCard.vue'
 import TrendChart from '../components/dashboard/TrendChart.vue'
 import SeverityChart from '../components/dashboard/SeverityChart.vue'
@@ -89,17 +89,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.page-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 4px;
-}
-.page-subtitle {
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-  margin-bottom: 24px;
-}
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

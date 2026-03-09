@@ -1,17 +1,11 @@
 <template>
   <div>
-    <div class="page-header">
-      <div class="page-header-copy">
-        <h1>攻击链分析</h1>
-        <p class="page-subtitle">
-          将关联告警、证据与处置决策聚合到同一链路中，帮助分析人员在更强上下文里理解威胁演进与响应路径。
-        </p>
-      </div>
-      <div class="page-header-meta">
+    <PageBanner title="攻击链分析" subtitle="将关联告警、证据与处置决策聚合到同一链路中，帮助分析人员在更强上下文里理解威胁演进与响应路径。">
+      <template #right>
         <span>Evidence Driven</span>
         <span>{{ chains.length }} Chains</span>
-      </div>
-    </div>
+      </template>
+    </PageBanner>
 
     <!-- Loading skeleton -->
     <div v-if="loading" class="chains-grid">
@@ -49,6 +43,7 @@
 
 <script setup>
 import { onMounted } from 'vue'
+import PageBanner from '../components/layout/PageBanner.vue'
 import { useChains } from '../composables/useChains.js'
 import ChainCard from '../components/chains/ChainCard.vue'
 

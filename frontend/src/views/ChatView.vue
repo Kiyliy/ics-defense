@@ -1,7 +1,6 @@
 <template>
   <div>
-    <h1 class="page-title">AI 对话</h1>
-    <p class="page-subtitle">结构化安全问答、MITRE 映射与行动建议</p>
+    <PageBanner title="AI 对话" subtitle="结构化安全问答、MITRE 映射与行动建议" />
 
     <div class="chat-layout">
       <ConversationList
@@ -56,6 +55,7 @@
 </template>
 
 <script setup>
+import PageBanner from '../components/layout/PageBanner.vue'
 import ConversationList from '../components/chat/ConversationList.vue'
 import MessageBubble from '../components/chat/MessageBubble.vue'
 import ChatInput from '../components/chat/ChatInput.vue'

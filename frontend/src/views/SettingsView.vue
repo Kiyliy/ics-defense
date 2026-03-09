@@ -1,11 +1,6 @@
 <template>
   <div class="settings-view">
-    <div class="page-header">
-      <div class="page-header-copy">
-        <h1>设置</h1>
-        <p class="page-subtitle">管理 Agent 运行参数与系统级配置</p>
-      </div>
-    </div>
+    <PageBanner title="设置" subtitle="管理 Agent 运行参数与系统级配置" />
 
     <div class="settings-body">
       <el-tabs v-model="activeTab" tab-position="left" class="settings-tabs">
@@ -22,6 +17,7 @@
 
 <script setup>
 import { ref } from 'vue'
+import PageBanner from '../components/layout/PageBanner.vue'
 import AgentConfig from '../components/settings/AgentConfig.vue'
 import SystemConfig from '../components/settings/SystemConfig.vue'
 
@@ -33,22 +29,6 @@ const activeTab = ref('agent')
   padding: 0 0 40px;
 }
 
-.page-header {
-  margin-bottom: 28px;
-}
-
-.page-header h1 {
-  font-size: 1.5rem;
-  font-weight: 800;
-  color: var(--text-primary);
-  letter-spacing: -0.02em;
-}
-
-.page-subtitle {
-  margin-top: 4px;
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-}
 
 .settings-body {
   background: var(--bg-primary);

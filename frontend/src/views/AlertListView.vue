@@ -1,17 +1,11 @@
 <template>
   <div class="alert-view">
-    <div class="page-header">
-      <div class="page-header-copy">
-        <h1>告警列表</h1>
-        <p class="page-subtitle">
-          统一查看全域告警、按风险与来源快速过滤，并将关键事件直接送入 AI 研判与攻击链分析流程。
-        </p>
-      </div>
-      <div class="page-header-meta">
+    <PageBanner title="告警列表" subtitle="统一查看全域告警、按风险与来源快速过滤，并将关键事件直接送入 AI 研判与攻击链分析流程。">
+      <template #right>
         <span>Alert Triage</span>
         <span>{{ store.total || 0 }} Total Records</span>
-      </div>
-    </div>
+      </template>
+    </PageBanner>
 
     <AlertFilters
       :filters="store.filters"
@@ -46,6 +40,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import PageBanner from '../components/layout/PageBanner.vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAlertStore } from '../stores/alert'

@@ -1,19 +1,12 @@
 <template>
   <div class="approval-view">
-    <!-- Page Header -->
-    <div class="page-header">
-      <div class="page-header-copy">
-        <h1>审批队列</h1>
-        <p class="page-subtitle">
-          对高敏感工具调用执行双重确认，确保自动化能力始终处于可控边界之内，符合防御侧审慎原则。
-        </p>
-      </div>
-      <div class="page-header-meta">
+    <PageBanner title="审批队列" subtitle="对高敏感工具调用执行双重确认，确保自动化能力始终处于可控边界之内，符合防御侧审慎原则。">
+      <template #right>
         <span>Human-in-the-Loop</span>
         <span v-if="pendingCount > 0">{{ pendingCount }} Pending</span>
         <span v-else>{{ approvals.length }} Items</span>
-      </div>
-    </div>
+      </template>
+    </PageBanner>
 
     <!-- Tab Navigation -->
     <div class="tab-bar">
@@ -71,6 +64,7 @@
 
 <script setup>
 import { onMounted } from 'vue'
+import PageBanner from '../components/layout/PageBanner.vue'
 import { useApproval } from '../composables/useApproval.js'
 import ApprovalCard from '../components/approval/ApprovalCard.vue'
 import RejectDialog from '../components/approval/RejectDialog.vue'

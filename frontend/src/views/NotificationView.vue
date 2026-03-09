@@ -1,17 +1,10 @@
 <template>
   <div class="notification-view">
-    <!-- Page Header -->
-    <div class="page-header">
-      <div class="page-header-copy">
-        <h1>通知管理</h1>
-        <p class="page-subtitle">
-          配置告警通知渠道与推送规则，确保关键安全事件第一时间触达值守人员。
-        </p>
-      </div>
-      <div class="page-header-meta">
+    <PageBanner title="通知管理" subtitle="配置告警通知渠道与推送规则，确保关键安全事件第一时间触达值守人员。">
+      <template #right>
         <span>Notification Center</span>
-      </div>
-    </div>
+      </template>
+    </PageBanner>
 
     <!-- Section: Channels -->
     <section class="content-section">
@@ -34,6 +27,7 @@
 </template>
 
 <script setup>
+import PageBanner from '../components/layout/PageBanner.vue'
 import ChannelConfig from '../components/notification/ChannelConfig.vue'
 import NotifyRules from '../components/notification/NotifyRules.vue'
 import NotifyHistory from '../components/notification/NotifyHistory.vue'

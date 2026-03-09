@@ -1,7 +1,6 @@
 <template>
   <div>
-    <h1 class="page-title">Agent 智能日志</h1>
-    <p class="page-subtitle">审计模型调用、工具执行与 trace 级链路信息</p>
+    <PageBanner title="Agent 智能日志" subtitle="审计模型调用、工具执行与 trace 级链路信息" />
 
     <LogStatsRow
       :stats="auditStats"
@@ -46,6 +45,7 @@
 <script setup>
 import { onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import PageBanner from '../components/layout/PageBanner.vue'
 import { useAgentLogs } from '../composables/useAgentLogs.js'
 import LogStatsRow from '../components/agent-log/LogStatsRow.vue'
 import LogFilters from '../components/agent-log/LogFilters.vue'

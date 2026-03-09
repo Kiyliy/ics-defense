@@ -8,11 +8,6 @@
       :agent-healthy="systemHealth.agent === 'healthy'"
     />
     <el-container class="main-shell">
-      <AppHeader
-        :title="currentSection.title"
-        :subtitle="currentSection.subtitle"
-        :system-health="systemHealth"
-      />
       <el-main class="app-main">
         <router-view />
       </el-main>
@@ -25,7 +20,6 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getAgentStatus, getBackendHealth } from '../api/index.js'
 import AppSidebar from './layout/AppSidebar.vue'
-import AppHeader from './layout/AppHeader.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -36,15 +30,6 @@ const systemHealth = ref({
   backendTimestamp: null,
   agentDetails: null,
 })
-
-const routeDescriptions = {
-  '/dashboard': '整合威胁态势、趋势与处置优先级。',
-  '/alerts': '统一筛选、研判与联动处置高风险告警。',
-  '/chains': '串联证据、决策与攻击链上下文。',
-  '/chat': '结合 AI 助手进行安全问答与推演。',
-  '/approval': '对高风险工具调用与决策执行进行双人审批。',
-  '/agent-logs': '回溯 trace、工具调用与模型行为链路。',
-}
 
 let healthTimer = null
 
@@ -62,11 +47,6 @@ const menuItems = computed(() => {
       group: r.meta.group || 'overview',
     }))
 })
-
-const currentSection = computed(() => ({
-  title: route.meta?.title || '工控防御',
-  subtitle: routeDescriptions[route.path] || '聚焦关键资产、防御链路与决策闭环。',
-}))
 
 const readinessLabel = computed(() => {
   if (systemHealth.value.backend === 'healthy' && systemHealth.value.agent === 'healthy') {
