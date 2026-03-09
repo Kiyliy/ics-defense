@@ -63,8 +63,9 @@ export function getConfigInt(key, defaultValue = 0) {
 export function setConfig(key, value) {
   if (!_db) throw new Error('Config service not initialized');
   _db.prepare(
-    `UPDATE system_config SET value = ?, updated_at = datetime('now') WHERE key = ?`
-  ).run(value, key);
+    `INSERT INTO system_config (key, value, updated_at) VALUES (?, ?, datetime('now'))
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+  ).run(key, value);
   cache.set(key, value);
 }
 
@@ -78,33 +79,28 @@ export function getAllConfig() {
 }
 
 /**
- * 批量更新配置
+ * 批量更新配置（支持 upsert，新 key 也会被创建）
  * @param {Record<string, string>} entries
- * @returns {{ updated: string[], unknown: string[] }}
+ * @returns {{ updated: string[] }}
  */
 export function batchSetConfig(entries) {
   if (!_db) throw new Error('Config service not initialized');
 
-  const existingKeys = new Set(cache.keys());
   const updated = [];
-  const unknown = [];
 
-  const update = _db.prepare(
-    `UPDATE system_config SET value = ?, updated_at = datetime('now') WHERE key = ?`
+  const upsert = _db.prepare(
+    `INSERT INTO system_config (key, value, updated_at) VALUES (?, ?, datetime('now'))
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
   );
 
   const runBatch = _db.transaction(() => {
     for (const [key, value] of Object.entries(entries)) {
-      if (!existingKeys.has(key)) {
-        unknown.push(key);
-        continue;
-      }
-      update.run(String(value), key);
+      upsert.run(key, String(value));
       cache.set(key, String(value));
       updated.push(key);
     }
   });
 
   runBatch();
-  return { updated, unknown };
+  return { updated };
 }

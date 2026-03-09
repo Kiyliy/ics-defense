@@ -14,6 +14,17 @@
         <span class="event-time">{{ time }}</span>
       </div>
       <div class="event-body">
+        <!-- LLM 回复内容单独展示 -->
+        <div v-if="llmContent" class="llm-content-block">
+          <div class="llm-content-label">模型回复</div>
+          <div class="llm-content-text">{{ llmContentPreview }}</div>
+          <div v-if="llmContent.length > 200" class="llm-content-toggle" @click.stop="showFullLlm = !showFullLlm">
+            {{ showFullLlm ? '收起' : '展开全部' }}
+          </div>
+          <Transition name="fade">
+            <div v-if="showFullLlm" class="llm-content-full">{{ llmContent }}</div>
+          </Transition>
+        </div>
         <div class="event-data-preview" @click.stop="$emit('toggle-detail')">
           <span class="data-text">{{ preview }}</span>
           <span class="expand-hint" v-if="canExpand">
@@ -41,7 +52,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import {
   eventTypeLabel,
   formatEventTime,
@@ -64,6 +75,8 @@ const props = defineProps({
 
 defineEmits(['toggle-detail'])
 
+const showFullLlm = ref(false)
+
 const label = computed(() => eventTypeLabel(props.event.event_type))
 const time = computed(() => formatEventTime(props.event.created_at))
 const preview = computed(() => truncateData(props.event.data))
@@ -73,6 +86,24 @@ const tokenUsageStr = computed(() => formatTokenUsage(props.event.token_usage))
 const hasTokens = computed(() => !!parseTokens(props.event.token_usage))
 const inputPct = computed(() => tokenInputPct(props.event.token_usage, props.maxTokens))
 const outputPct = computed(() => tokenOutputPct(props.event.token_usage, props.maxTokens))
+
+// 提取 LLM 回复内容（仅 llm_call / llm_summary_call 事件）
+const llmContent = computed(() => {
+  const et = props.event.event_type
+  if (et !== 'llm_call' && et !== 'llm_summary_call') return ''
+  let data = props.event.data
+  if (typeof data === 'string') {
+    try { data = JSON.parse(data) } catch { return '' }
+  }
+  return data?.content || ''
+})
+
+const llmContentPreview = computed(() => {
+  if (!llmContent.value) return ''
+  return llmContent.value.length > 200
+    ? llmContent.value.slice(0, 200) + '...'
+    : llmContent.value
+})
 </script>
 
 <style scoped>
@@ -208,6 +239,53 @@ const outputPct = computed(() => tokenOutputPct(props.event.token_usage, props.m
   overflow-x: auto;
   max-height: 400px;
   overflow-y: auto;
+}
+
+/* LLM content block */
+.llm-content-block {
+  margin-bottom: 10px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md, 8px);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.04), rgba(139, 92, 246, 0.06));
+  border: 1px solid rgba(99, 102, 241, 0.15);
+}
+
+.llm-content-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6366f1;
+  margin-bottom: 6px;
+}
+
+.llm-content-text {
+  font-size: 0.84rem;
+  line-height: 1.7;
+  color: var(--text-primary, #1e293b);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.llm-content-toggle {
+  margin-top: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent, #3b82f6);
+  cursor: pointer;
+}
+
+.llm-content-toggle:hover {
+  text-decoration: underline;
+}
+
+.llm-content-full {
+  margin-top: 8px;
+  font-size: 0.82rem;
+  line-height: 1.7;
+  color: var(--text-primary, #1e293b);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* Token bar */

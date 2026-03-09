@@ -109,11 +109,7 @@ async function main() {
   }
 }
 
-const isDirectRun = process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href;
-
-if (isDirectRun) {
-  main().catch((error) => {
-    console.error('[notification-worker] fatal error', error);
-    process.exit(1);
-  });
-}
+main().catch((error) => {
+  console.error('[notification-worker] fatal error', error);
+  process.exit(1);
+});

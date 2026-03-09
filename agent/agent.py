@@ -558,11 +558,16 @@ async def agent_loop(
             response = client.chat.completions.create(**create_kwargs)
             msg = response.choices[0].message
 
-            # 审计: LLM 调用
+            # 审计: LLM 调用（包含模型回复内容）
+            llm_log_data = {
+                "finish_reason": response.choices[0].finish_reason,
+            }
+            if msg.content:
+                llm_log_data["content"] = msg.content
             audit.log(
                 trace_id,
                 "llm_call",
-                {"finish_reason": response.choices[0].finish_reason},
+                llm_log_data,
                 token_usage={
                     "input_tokens": getattr(response.usage, 'prompt_tokens', 0),
                     "output_tokens": getattr(response.usage, 'completion_tokens', 0),
@@ -596,7 +601,8 @@ async def agent_loop(
             ]
             exec_messages.append(assistant_msg)
 
-            # 处理每个工具调用
+            # 处理每个工具调用 —— 预处理：策略检查、审批、死循环检测
+            pending_calls = []  # (tc, tool_name, tool_input, level) 通过预检的调用
             for tc in tool_calls:
                 tool_name = tc.function.name
                 try:
@@ -665,55 +671,73 @@ async def agent_loop(
                     })
                     continue
 
-                # --- 执行工具调用（带重试） ---
+                pending_calls.append((tc, tool_name, tool_input, level))
+
+            # --- 并发执行所有通过预检的 MCP 工具调用 ---
+            async def _execute_single_tool(tc_item):
+                """执行单个工具调用，返回 (tc, tool_name, tool_input, level, result_str)"""
+                tc, t_name, t_input, t_level = tc_item
                 if mcp:
                     result = await guard.execute_with_retry(
-                        mcp.call_tool, tool_name, tool_input,
+                        mcp.call_tool, t_name, t_input,
                     )
                 else:
                     result = {"error": "MCP 客户端不可用，无法执行工具调用"}
-
-                # 转为字符串
                 if isinstance(result, dict):
-                    result_str = json.dumps(result, ensure_ascii=False)
+                    r_str = json.dumps(result, ensure_ascii=False)
                 else:
-                    result_str = str(result)
+                    r_str = str(result)
+                return tc, t_name, t_input, t_level, r_str
 
-                # 审计: 工具调用
-                audit.log(trace_id, "tool_call", {
-                    "tool_name": tool_name,
-                    "tool_input": tool_input,
-                    "result_preview": result_str[:500],
-                    "policy_level": level,
-                })
+            if pending_calls:
+                # 并发执行所有工具调用
+                call_results = await asyncio.gather(
+                    *[_execute_single_tool(item) for item in pending_calls],
+                    return_exceptions=True,
+                )
 
-                # Hook: on_tool_called
-                if hooks:
-                    await hooks.trigger("on_tool_called", {
-                        "trace_id": trace_id,
+                for cr in call_results:
+                    if isinstance(cr, Exception):
+                        logger.error("[%s] 工具并发执行异常: %s", trace_id, cr)
+                        continue
+
+                    tc, tool_name, tool_input, level, result_str = cr
+
+                    # 审计: 工具调用
+                    audit.log(trace_id, "tool_call", {
                         "tool_name": tool_name,
                         "tool_input": tool_input,
+                        "result_preview": result_str[:500],
+                        "policy_level": level,
                     })
 
-                # 通知级别：触发 on_tool_result 钩子
-                if level == "notify" and hooks:
-                    await hooks.trigger("on_tool_result", {
-                        "trace_id": trace_id,
-                        "tool_name": tool_name,
-                        "result_preview": result_str[:200],
+                    # Hook: on_tool_called
+                    if hooks:
+                        await hooks.trigger("on_tool_called", {
+                            "trace_id": trace_id,
+                            "tool_name": tool_name,
+                            "tool_input": tool_input,
+                        })
+
+                    # 通知级别：触发 on_tool_result 钩子
+                    if level == "notify" and hooks:
+                        await hooks.trigger("on_tool_result", {
+                            "trace_id": trace_id,
+                            "tool_name": tool_name,
+                            "result_preview": result_str[:200],
+                        })
+
+                    # OpenAI 格式的工具结果
+                    exec_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": result_str,
                     })
 
-                # OpenAI 格式的工具结果
-                exec_messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call_id,
-                    "content": result_str,
-                })
-
-                # 更新计划步骤状态
-                next_step = plan.get_next_pending()
-                if next_step:
-                    plan.mark_step(next_step.id, "completed", result_str[:100])
+                    # 更新计划步骤状态
+                    next_step = plan.get_next_pending()
+                    if next_step:
+                        plan.mark_step(next_step.id, "completed", result_str[:100])
 
         # ---------------------------------------------------------------
         # Phase 4: 总结 — 解析决策

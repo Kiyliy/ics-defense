@@ -27,15 +27,18 @@ export function eventTypeCategory(type) {
 
 export function eventTypeLabel(type) {
   const labels = {
-    analysis_started: 'Analysis Start',
-    plan_generated: 'Plan Generated',
-    llm_call: 'LLM Call',
-    llm_summary_call: 'LLM Summary',
-    tool_call: 'Tool Call',
-    tool_result: 'Tool Result',
-    decision_made: 'Decision',
-    analysis_finished: 'Finished',
-    error: 'Error',
+    analysis_started: '分析开始',
+    plan_generated: '计划生成',
+    llm_call: 'LLM 推理',
+    llm_summary_call: 'LLM 总结',
+    tool_call: '工具调用',
+    tool_result: '工具结果',
+    decision_made: '决策',
+    analysis_finished: '分析完成',
+    error: '错误',
+    guard_exception: '守卫异常',
+    agent_stuck: '循环检测',
+    approval_result: '审批结果',
   }
   return labels[type] || type.replace(/_/g, ' ')
 }

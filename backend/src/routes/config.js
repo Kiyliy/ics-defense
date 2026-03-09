@@ -44,12 +44,6 @@ router.put('/:key', (req, res) => {
     return res.status(400).json({ error: 'value is required' });
   }
 
-  const configs = getAllConfig();
-  const exists = configs.find((c) => c.key === req.params.key);
-  if (!exists) {
-    return res.status(404).json({ error: `Config key "${req.params.key}" not found` });
-  }
-
   setConfig(req.params.key, String(value));
   res.json({ key: req.params.key, value: String(value), updated: true });
 });
@@ -65,8 +59,8 @@ router.put('/', (req, res) => {
     return res.status(400).json({ error: 'Body must be a JSON object of { key: value } pairs' });
   }
 
-  const { updated, unknown } = batchSetConfig(entries);
-  res.json({ updated, unknown });
+  const { updated } = batchSetConfig(entries);
+  res.json({ updated });
 });
 
 /**

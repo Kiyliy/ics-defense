@@ -11,6 +11,7 @@ module.exports = {
       cwd: '/root/kimi_dev/lunwen/ics-defense/backend',
       script: 'src/workers/notification-worker.js',
       interpreter: 'node',
+      node_args: '--env-file=.env',
     },
   ],
 };
