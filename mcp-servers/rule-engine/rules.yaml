@@ -1,0 +1,169 @@
+# ICS Security Correlation Rules
+# Schema: {id, name, description, conditions, severity, mitre_technique}
+
+rules:
+  - id: rule-port-scan-then-exploit
+    name: 端口扫描后利用
+    description: 同一源IP先进行端口扫描，后发起漏洞利用
+    conditions:
+      same_field: src_ip
+      sequence:
+        - title_pattern: "端口扫描|port scan|nmap|masscan|网络探测"
+          within_hours: 24
+        - title_pattern: "漏洞利用|exploit|注入|injection|远程执行"
+          within_hours: 24
+    severity: high
+    mitre_technique:
+      - T0846
+      - T0866
+
+  - id: rule-brute-force
+    name: 暴力破解
+    description: 同一源IP短时间内大量登录失败
+    conditions:
+      same_field: src_ip
+      title_pattern: "登录失败|login fail|authentication fail|brute|认证失败|密码错误"
+      min_count: 10
+      within_hours: 1
+    severity: high
+    mitre_technique:
+      - T0078
+
+  - id: rule-sql-injection-chain
+    name: SQL注入攻击链
+    description: SQL注入告警且频繁出现，说明自动化攻击
+    conditions:
+      title_pattern: "SQL注入|sql injection|sqli|union select|sqlmap"
+      min_count: 5
+    severity: critical
+    mitre_technique:
+      - T0890
+
+  - id: rule-lateral-movement
+    name: 横向移动
+    description: 内网IP之间的异常连接
+    conditions:
+      src_ip_pattern: "^(10\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.|192\\.168\\.)"
+      dst_ip_pattern: "^(10\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.|192\\.168\\.)"
+      title_pattern: "异常连接|lateral|远程执行|remote exec|psexec|wmi|横向"
+    severity: high
+    mitre_technique:
+      - T0812
+
+  - id: rule-data-exfiltration
+    name: 数据外泄
+    description: 内网IP向外网发送大量数据
+    conditions:
+      src_ip_pattern: "^(10\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.|192\\.168\\.)"
+      dst_ip_pattern: "^(?!(10\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.|192\\.168\\.))"
+      title_pattern: "数据外泄|exfiltration|大量传输|异常流量|数据窃取"
+    severity: critical
+    mitre_technique:
+      - T0882
+
+  - id: rule-modbus-anomaly
+    name: Modbus协议异常
+    description: 检测到Modbus协议的异常功能码或非法操作
+    conditions:
+      title_pattern: "modbus|功能码异常|非法功能码|modbus exception|illegal function"
+      min_count: 3
+    severity: high
+    mitre_technique:
+      - T0855
+
+  - id: rule-unauthorized-plc-access
+    name: 未授权PLC访问
+    description: 非授权IP对PLC/RTU设备发起连接或写操作
+    conditions:
+      title_pattern: "未授权.*PLC|unauthorized.*plc|非法访问.*控制器|unauthorized.*controller|PLC.*写入"
+      min_count: 1
+    severity: critical
+    mitre_technique:
+      - T0855
+      - T0831
+
+  - id: rule-firmware-modification
+    name: 固件篡改检测
+    description: 检测到PLC/RTU等设备的固件上传或变更操作
+    conditions:
+      title_pattern: "固件.*变更|firmware.*change|固件.*上传|firmware.*upload|固件.*篡改|firmware.*modify"
+      min_count: 1
+    severity: critical
+    mitre_technique:
+      - T0839
+
+  - id: rule-dnp3-anomaly
+    name: DNP3协议异常
+    description: 检测到DNP3协议的非法操作或异常请求
+    conditions:
+      title_pattern: "dnp3|dnp3.*异常|dnp3.*illegal|dnp3.*unauthorized|dnp3.*cold restart"
+      min_count: 2
+    severity: high
+    mitre_technique:
+      - T0855
+      - T0813
+
+  - id: rule-opcua-abuse
+    name: OPC-UA服务滥用
+    description: 检测到对OPC-UA服务的异常访问或大量读取操作
+    conditions:
+      title_pattern: "opc-ua|opcua|opc ua|opc.*异常|opc.*abuse|opc.*unauthorized"
+      min_count: 5
+    severity: high
+    mitre_technique:
+      - T0871
+      - T0882
+
+  - id: rule-hmi-unauthorized-change
+    name: HMI未授权操作
+    description: 检测到对HMI界面的未授权配置变更
+    conditions:
+      title_pattern: "HMI.*未授权|HMI.*unauthorized|HMI.*配置变更|HMI.*setpoint|人机界面.*异常"
+      min_count: 1
+    severity: critical
+    mitre_technique:
+      - T0831
+
+  - id: rule-scada-dos
+    name: SCADA拒绝服务
+    description: 检测到针对SCADA系统的拒绝服务攻击
+    conditions:
+      title_pattern: "scada.*dos|scada.*拒绝服务|scada.*flood|控制系统.*不可用|SCADA.*denial"
+      min_count: 3
+    severity: critical
+    mitre_technique:
+      - T0814
+      - T0826
+
+  - id: rule-engineering-workstation-compromise
+    name: 工程师站异常
+    description: 工程师站发起异常连接或出现恶意活动
+    conditions:
+      title_pattern: "工程师站|engineering workstation|EWS.*异常|工程站.*恶意|工程站.*可疑"
+      min_count: 1
+    severity: critical
+    mitre_technique:
+      - T0807
+      - T0871
+
+  - id: rule-safety-system-tampering
+    name: 安全仪表系统篡改
+    description: 检测到对安全仪表系统(SIS)的未授权操作
+    conditions:
+      title_pattern: "SIS.*篡改|safety.*tamper|安全仪表.*异常|SIS.*unauthorized|安全系统.*绕过"
+      min_count: 1
+    severity: critical
+    mitre_technique:
+      - T0855
+      - T0879
+
+  - id: rule-command-injection-ics
+    name: 工控命令注入
+    description: 检测到通过网络接口向工控设备注入恶意命令
+    conditions:
+      title_pattern: "命令注入|command injection|RCE|远程代码执行|远程命令|shell.*注入"
+      min_count: 2
+    severity: critical
+    mitre_technique:
+      - T0807
+      - T0855

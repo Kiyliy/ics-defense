@@ -1,87 +1,80 @@
 import json
+import logging
+import os
 import re
+from pathlib import Path
+
+import yaml
 from mcp.server.fastmcp import FastMCP
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s %(message)s",
+)
+logger = logging.getLogger("rule-engine")
 
 mcp = FastMCP(name="rule-engine", instructions="ICS 安全关联规则匹配引擎")
 
-# 预定义关联规则
-CORRELATION_RULES = [
-    {
-        "id": "rule-port-scan-then-exploit",
-        "name": "端口扫描后利用",
-        "description": "同一源IP先进行端口扫描，后发起漏洞利用",
-        "conditions": {
-            "same_field": "src_ip",
-            "sequence": [
-                {"title_pattern": "端口扫描|port scan|nmap", "within_hours": 24},
-                {"title_pattern": "漏洞利用|exploit|注入|injection", "within_hours": 24},
-            ],
-        },
-        "risk_boost": "high",
-        "mitre_chain": ["T0846", "T0866"],
-    },
-    {
-        "id": "rule-brute-force",
-        "name": "暴力破解",
-        "description": "同一源IP短时间内大量登录失败",
-        "conditions": {
-            "same_field": "src_ip",
-            "title_pattern": "登录失败|login fail|authentication fail|brute",
-            "min_count": 10,
-            "within_hours": 1,
-        },
-        "risk_boost": "high",
-        "mitre_chain": ["T0078"],
-    },
-    {
-        "id": "rule-sql-injection-chain",
-        "name": "SQL注入攻击链",
-        "description": "SQL注入告警且目标为关键资产",
-        "conditions": {
-            "title_pattern": "SQL注入|sql injection|sqli",
-            "min_count": 5,
-        },
-        "risk_boost": "critical",
-        "mitre_chain": ["T0890"],
-    },
-    {
-        "id": "rule-lateral-movement",
-        "name": "横向移动",
-        "description": "内网IP之间的异常连接",
-        "conditions": {
-            "src_ip_pattern": r"^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)",
-            "dst_ip_pattern": r"^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)",
-            "title_pattern": "异常连接|lateral|远程执行|remote exec",
-        },
-        "risk_boost": "high",
-        "mitre_chain": ["T0812"],
-    },
-    {
-        "id": "rule-data-exfiltration",
-        "name": "数据外泄",
-        "description": "内网IP向外网发送大量数据",
-        "conditions": {
-            "src_ip_pattern": r"^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)",
-            "dst_ip_pattern": r"^(?!(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.))",
-            "title_pattern": "数据外泄|exfiltration|大量传输|异常流量",
-        },
-        "risk_boost": "critical",
-        "mitre_chain": ["T0882"],
-    },
-]
+# ---------------------------------------------------------------------------
+# Load rules from YAML
+# ---------------------------------------------------------------------------
+_RULES_PATH = Path(__file__).parent / "rules.yaml"
 
 
+def _load_rules(path: Path = _RULES_PATH) -> list[dict]:
+    """Load correlation rules from YAML config file."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        rules = data.get("rules", [])
+        logger.info("从 %s 加载了 %d 条关联规则", path, len(rules))
+        # Normalize field names: severity -> risk_boost, mitre_technique -> mitre_chain
+        # to keep backward compatibility with the internal matching logic
+        for r in rules:
+            if "severity" in r and "risk_boost" not in r:
+                r["risk_boost"] = r.pop("severity")
+            if "mitre_technique" in r and "mitre_chain" not in r:
+                r["mitre_chain"] = r.pop("mitre_technique")
+        return rules
+    except FileNotFoundError:
+        logger.error("规则文件不存在: %s，使用空规则集", path)
+        return []
+    except yaml.YAMLError as exc:
+        logger.error("规则文件 YAML 解析失败: %s，使用空规则集", exc)
+        return []
+    except Exception as exc:
+        logger.error("加载规则文件异常: %s，使用空规则集", exc)
+        return []
+
+
+CORRELATION_RULES = _load_rules()
+
+
+# ---------------------------------------------------------------------------
+# Internal matching helpers
+# ---------------------------------------------------------------------------
 def _matches_title(alert: dict, pattern: str) -> bool:
     """Check if alert title matches the given regex pattern (case-insensitive)."""
     title = alert.get("title", "")
-    return bool(re.search(pattern, title, re.IGNORECASE))
+    try:
+        return bool(re.search(pattern, title, re.IGNORECASE))
+    except re.error as exc:
+        logger.warning("正则表达式错误 '%s': %s", pattern, exc)
+        return False
 
 
 def _matches_ip(value: str | None, pattern: str) -> bool:
     """Check if an IP value matches the given regex pattern."""
     if not value:
         return False
-    return bool(re.search(pattern, value))
+    try:
+        return bool(re.search(pattern, value))
+    except re.error as exc:
+        logger.warning("IP正则表达式错误 '%s': %s", pattern, exc)
+        return False
 
 
 def _check_rule(rule: dict, alerts: list) -> dict | None:
@@ -94,7 +87,10 @@ def _check_rule(rule: dict, alerts: list) -> dict | None:
     - src_ip_pattern / dst_ip_pattern: IP 正则
     - sequence: 按顺序出现的告警模式
     """
-    conditions = rule["conditions"]
+    conditions = rule.get("conditions")
+    if not conditions:
+        logger.warning("规则 %s 缺少 conditions 字段", rule.get("id", "?"))
+        return None
 
     # --- sequence-based rules (e.g., port-scan-then-exploit) ---
     if "sequence" in conditions:
@@ -213,14 +209,17 @@ def _check_sequence_rule(rule: dict, alerts: list) -> dict | None:
 def _rule_info(rule: dict) -> dict:
     """Extract public rule info (without internal conditions)."""
     return {
-        "id": rule["id"],
-        "name": rule["name"],
-        "description": rule["description"],
-        "risk_boost": rule["risk_boost"],
-        "mitre_chain": rule["mitre_chain"],
+        "id": rule.get("id", ""),
+        "name": rule.get("name", ""),
+        "description": rule.get("description", ""),
+        "risk_boost": rule.get("risk_boost", ""),
+        "mitre_chain": rule.get("mitre_chain", []),
     }
 
 
+# ---------------------------------------------------------------------------
+# MCP Tools
+# ---------------------------------------------------------------------------
 @mcp.tool()
 def match_rules(alerts: list[dict] | str) -> str:
     """对一组告警执行关联规则匹配
@@ -235,12 +234,26 @@ def match_rules(alerts: list[dict] | str) -> str:
         try:
             alerts = json.loads(alerts)
         except (json.JSONDecodeError, TypeError) as exc:
+            logger.warning("match_rules: alerts JSON 解析失败: %s", exc)
             return json.dumps({"error": f"alerts JSON 解析失败: {exc}"}, ensure_ascii=False)
+
+    if not isinstance(alerts, list):
+        logger.warning("match_rules: alerts 参数类型错误: %s", type(alerts))
+        return json.dumps({"error": "alerts 必须为数组"}, ensure_ascii=False)
+
+    logger.info("match_rules: 开始匹配 %d 条告警, 共 %d 条规则", len(alerts), len(CORRELATION_RULES))
+
     matched = []
     for rule in CORRELATION_RULES:
-        result = _check_rule(rule, alerts)
-        if result:
-            matched.append(result)
+        try:
+            result = _check_rule(rule, alerts)
+            if result:
+                matched.append(result)
+                logger.info("规则 [%s] 匹配成功", rule.get("name", rule.get("id")))
+        except Exception as exc:
+            logger.error("规则 %s 匹配异常: %s", rule.get("id", "?"), exc, exc_info=True)
+
+    logger.info("match_rules: 共匹配 %d 条规则", len(matched))
     return json.dumps({"matched_rules": matched}, ensure_ascii=False)
 
 
@@ -251,15 +264,16 @@ def get_rules() -> str:
     Returns:
         JSON 格式的规则列表（不含内部匹配逻辑）
     """
+    logger.info("get_rules: 返回 %d 条规则", len(CORRELATION_RULES))
     rules_info = []
     for r in CORRELATION_RULES:
         rules_info.append(
             {
-                "id": r["id"],
-                "name": r["name"],
-                "description": r["description"],
-                "risk_boost": r["risk_boost"],
-                "mitre_chain": r["mitre_chain"],
+                "id": r.get("id", ""),
+                "name": r.get("name", ""),
+                "description": r.get("description", ""),
+                "risk_boost": r.get("risk_boost", ""),
+                "mitre_chain": r.get("mitre_chain", []),
             }
         )
     return json.dumps({"rules": rules_info}, ensure_ascii=False)
