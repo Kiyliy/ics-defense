@@ -11,7 +11,6 @@
 
 import json
 import logging
-import sqlite3
 import time
 from typing import Optional
 
@@ -75,8 +74,10 @@ class Pipeline:
         self._pending_count = 0
         self._last_flush_time = time.monotonic()
 
-        # 初始化 SQLite
-        self._db = self._init_db(db_path)
+        # 初始化 SQLite (via unified data layer)
+        init_db(db_path)
+        self._db_ctx = get_db(db_path)
+        self._db = self._db_ctx.__enter__()
 
         # Redis 生产者（可选）
         self._producer: Optional[AlertProducer] = None
@@ -94,17 +95,6 @@ class Pipeline:
     # ------------------------------------------------------------------
     # 内部工具
     # ------------------------------------------------------------------
-    @staticmethod
-    def _init_db(db_path: str) -> sqlite3.Connection:
-        """初始化 SQLite 连接并确保所需表存在。"""
-        # Use the unified data layer to create all tables
-        init_db(db_path)
-        conn = sqlite3.connect(db_path, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
-        return conn
-
     def _store_raw_event(self, source: str, raw: dict) -> int:
         """将原始事件写入 raw_events 表，返回自增 ID。"""
         raw_json = json.dumps(raw, ensure_ascii=False, default=str)

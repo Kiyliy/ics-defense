@@ -60,26 +60,7 @@ DECISION_RESPONSE_SCHEMA = {
 }
 
 
-def _create_structured_completion(
-    client: OpenAI,
-    *,
-    model: str,
-    messages: list[dict[str, Any]],
-    schema: dict[str, Any],
-    max_tokens: int,
-    temperature: float,
-):
-    """调用兼容 OpenAI 的 structured outputs 接口。"""
-    return client.chat.completions.create(
-        model=model,
-        max_tokens=max_tokens,
-        temperature=temperature,
-        messages=messages,
-        response_format={
-            "type": "json_schema",
-            "json_schema": schema,
-        },
-    )
+from agent.llm_utils import create_structured_completion as _create_structured_completion
 
 
 # ---------------------------------------------------------------------------

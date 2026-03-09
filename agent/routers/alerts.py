@@ -48,22 +48,10 @@ def normalize(source: str, raw_event: Any) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Config helpers (read from system_config table)
+# Config helpers (from shared _helpers module)
 # ---------------------------------------------------------------------------
 
-def _get_config(conn: sqlite3.Connection, key: str, default: str = "") -> str:
-    row = conn.execute("SELECT value FROM system_config WHERE key = ?", (key,)).fetchone()
-    return row["value"] if row else default
-
-
-def _get_config_int(conn: sqlite3.Connection, key: str, default: int = 0) -> int:
-    raw = _get_config(conn, key)
-    if not raw:
-        return default
-    try:
-        return int(raw)
-    except (ValueError, TypeError):
-        return default
+from agent.routers._helpers import get_config as _get_config, get_config_int as _get_config_int
 
 
 # ---------------------------------------------------------------------------

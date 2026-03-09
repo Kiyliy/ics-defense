@@ -26,22 +26,10 @@ AGENT_SERVICE_URL = os.environ.get("AGENT_SERVICE_URL", "http://localhost:8002")
 
 
 # ---------------------------------------------------------------------------
-# Config helpers
+# Config helpers (from shared _helpers module)
 # ---------------------------------------------------------------------------
 
-def _get_config(conn, key: str, default: str = "") -> str:
-    row = conn.execute("SELECT value FROM system_config WHERE key = ?", (key,)).fetchone()
-    return row["value"] if row else default
-
-
-def _get_config_int(conn, key: str, default: int = 0) -> int:
-    raw = _get_config(conn, key)
-    if not raw:
-        return default
-    try:
-        return int(raw)
-    except (ValueError, TypeError):
-        return default
+from agent.routers._helpers import get_config as _get_config, get_config_int as _get_config_int
 
 
 # ---------------------------------------------------------------------------

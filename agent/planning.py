@@ -69,26 +69,7 @@ def _load_planning_system_prompt() -> str:
         return "请为以下告警制定分析计划，以 JSON 格式输出。"
 
 
-def _create_structured_completion(
-    client: OpenAI,
-    *,
-    model: str,
-    messages: list[dict[str, Any]],
-    schema: dict[str, Any],
-    max_tokens: int,
-    temperature: float,
-):
-    """调用兼容 OpenAI 的 structured outputs 接口。"""
-    return client.chat.completions.create(
-        model=model,
-        max_tokens=max_tokens,
-        temperature=temperature,
-        messages=messages,
-        response_format={
-            "type": "json_schema",
-            "json_schema": schema,
-        },
-    )
+from agent.llm_utils import create_structured_completion as _create_structured_completion
 
 
 async def recall_memories(
