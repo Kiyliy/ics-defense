@@ -1,0 +1,55 @@
+# ICS 安全防御平台 - 靶场环境
+# 包含: Pikachu 漏洞靶场 (内置 MySQL + Apache + PHP) + 日志代理
+#
+# 用法:
+#   docker compose -f docker-compose.range.yml up -d
+#   # 首次启动后需初始化数据库:
+#   #   curl -X POST "http://localhost:8888/install.php" -d "submit=安装/初始化"
+#   python3 scripts/attack_pikachu.py          # 运行攻击脚本（走代理 8889）
+#   日志自动写入 ./range-logs/pikachu/         # 供 PikachuCollector 采集
+#
+# 端口:
+#   8888 - Pikachu 靶场直连（调试用）
+#   8889 - 日志代理入口（攻击脚本默认走这里）
+
+services:
+  # ----------------------------------------------------------------
+  # Pikachu 漏洞靶场 (area39/pikachu 内置 MySQL+Apache+PHP)
+  # 漏洞模块: SQL注入、XSS、CSRF、文件上传、RCE、目录遍历、暴力破解等
+  # ----------------------------------------------------------------
+  pikachu:
+    image: area39/pikachu:latest
+    container_name: pikachu-web
+    ports:
+      - "${PIKACHU_PORT:-8888}:80"
+    restart: unless-stopped
+    networks:
+      - range-net
+
+  # ----------------------------------------------------------------
+  # 日志代理 - 反向代理 + 攻击流量日志记录
+  # 检测请求中的攻击特征（SQL注入/XSS/RCE/目录遍历/暴力破解/文件上传）
+  # 将命中的请求记录为 JSON Lines 日志，字段与 normalize_pikachu() 对齐
+  # ----------------------------------------------------------------
+  pikachu-logger:
+    image: python:3.11-slim
+    container_name: pikachu-logger
+    ports:
+      - "${PIKACHU_PROXY_PORT:-8889}:8889"
+    volumes:
+      - ./range-logs/pikachu:/var/log/pikachu
+      - ./scripts/log_proxy.py:/app/log_proxy.py:ro
+    command: python3 /app/log_proxy.py
+    environment:
+      UPSTREAM_URL: "http://pikachu:80"
+      LISTEN_PORT: "8889"
+      LOG_DIR: "/var/log/pikachu"
+    depends_on:
+      - pikachu
+    restart: unless-stopped
+    networks:
+      - range-net
+
+networks:
+  range-net:
+    driver: bridge
