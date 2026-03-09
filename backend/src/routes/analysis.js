@@ -3,9 +3,14 @@
 import { Router } from 'express';
 import { analyzeAlerts, chat } from '../services/llm.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
-import { getConfigInt } from '../services/config.js';
+import { getConfig, getConfigInt } from '../services/config.js';
 
-const AGENT_SERVICE_URL = process.env.AGENT_SERVICE_URL || 'http://localhost:8000';
+const ENV_AGENT_SERVICE_URL = process.env.AGENT_SERVICE_URL || 'http://localhost:8002';
+
+/** 动态获取 Agent 服务地址（优先数据库，回退环境变量） */
+function getAgentUrl() {
+  return getConfig('agent.service_url', ENV_AGENT_SERVICE_URL);
+}
 
 /**
  * @typedef {{ trace_id: string, status?: string, message?: string }} AgentServiceResponse
@@ -35,7 +40,7 @@ function findMissingAlertIds(requestedIds, alerts) {
  * @param {{ fetchFn?: typeof fetch, agentServiceUrl?: string }} [options]
  * @returns {Promise<AgentServiceResponse>}
  */
-async function callAgentService(alertIds, { fetchFn = fetch, agentServiceUrl = AGENT_SERVICE_URL } = {}) {
+async function callAgentService(alertIds, { fetchFn = fetch, agentServiceUrl = getAgentUrl() } = {}) {
   const resp = await fetchFn(`${agentServiceUrl}/analyze`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -52,7 +57,7 @@ async function callAgentService(alertIds, { fetchFn = fetch, agentServiceUrl = A
  * @param {{ fetchFn?: typeof fetch, agentServiceUrl?: string }} [options]
  * @returns {Promise<any>}
  */
-async function getAgentServiceStatus({ fetchFn = fetch, agentServiceUrl = AGENT_SERVICE_URL } = {}) {
+async function getAgentServiceStatus({ fetchFn = fetch, agentServiceUrl = getAgentUrl() } = {}) {
   const resp = await fetchFn(`${agentServiceUrl}/status`, {
     method: 'GET',
     headers: { Accept: 'application/json' },
@@ -72,7 +77,7 @@ async function getAgentServiceStatus({ fetchFn = fetch, agentServiceUrl = AGENT_
 export function createAnalysisRouter({
   fetchFn = fetch,
   chatFn = chat,
-  agentServiceUrl = AGENT_SERVICE_URL,
+  agentServiceUrl = getAgentUrl(),
 } = {}) {
   const router = Router();
 
@@ -82,6 +87,23 @@ export function createAnalysisRouter({
       return res.json(status);
     } catch (agentErr) {
       console.error('Agent status unavailable:', getErrorMessage(agentErr));
+      return res.status(503).json({ error: 'Agent Service unavailable' });
+    }
+  }));
+
+  router.get('/mcp/servers', asyncHandler(async (_req, res) => {
+    try {
+      const resp = await fetchFn(`${agentServiceUrl}/mcp/servers`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      });
+      if (!resp.ok) {
+        throw new Error(`Agent Service returned ${resp.status}`);
+      }
+      const data = await resp.json();
+      return res.json(data);
+    } catch (err) {
+      console.error('MCP servers info unavailable:', getErrorMessage(err));
       return res.status(503).json({ error: 'Agent Service unavailable' });
     }
   }));
@@ -128,8 +150,72 @@ export function createAnalysisRouter({
   }));
 
 /**
+ * 从数据库获取当前系统上下文，注入给 LLM
+ * @param {any} db
+ * @returns {string}
+ */
+  function buildSystemContext(db) {
+    try {
+      const parts = [];
+
+      // 告警统计
+      const stats = db.prepare(`
+        SELECT
+          COUNT(*) as total,
+          SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) as open_count,
+          SUM(CASE WHEN status = 'analyzing' THEN 1 ELSE 0 END) as analyzing_count,
+          SUM(CASE WHEN severity = 'critical' THEN 1 ELSE 0 END) as critical_count,
+          SUM(CASE WHEN severity = 'high' THEN 1 ELSE 0 END) as high_count,
+          SUM(CASE WHEN severity = 'medium' THEN 1 ELSE 0 END) as medium_count,
+          SUM(CASE WHEN severity = 'low' THEN 1 ELSE 0 END) as low_count
+        FROM alerts
+      `).get();
+      if (stats && stats.total > 0) {
+        parts.push(`告警概览: 共${stats.total}条告警, 待处理${stats.open_count}条, 分析中${stats.analyzing_count}条`);
+        parts.push(`严重度分布: 严重${stats.critical_count} / 高${stats.high_count} / 中${stats.medium_count} / 低${stats.low_count}`);
+      } else {
+        parts.push('告警概览: 当前系统无告警记录');
+      }
+
+      // 最近 5 条告警
+      const recentAlerts = db.prepare(`
+        SELECT id, title, severity, source, src_ip, dst_ip, status, created_at
+        FROM alerts ORDER BY created_at DESC LIMIT 5
+      `).all();
+      if (recentAlerts.length > 0) {
+        parts.push('\n最近告警:');
+        for (const a of recentAlerts) {
+          parts.push(`  - [${a.severity}] ${a.title} (来源:${a.source}, ${a.src_ip||'?'}→${a.dst_ip||'?'}, 状态:${a.status})`);
+        }
+      }
+
+      // 攻击链
+      const chains = db.prepare(`
+        SELECT id, name, stage, confidence FROM attack_chains ORDER BY created_at DESC LIMIT 3
+      `).all();
+      if (chains.length > 0) {
+        parts.push('\n最近攻击链:');
+        for (const c of chains) {
+          parts.push(`  - ${c.name} (阶段:${c.stage}, 置信度:${c.confidence})`);
+        }
+      }
+
+      // 资产
+      const assetCount = db.prepare('SELECT COUNT(*) as cnt FROM assets').get();
+      if (assetCount && assetCount.cnt > 0) {
+        parts.push(`\n资产: 共${assetCount.cnt}台受监控资产`);
+      }
+
+      return parts.join('\n');
+    } catch (err) {
+      console.error('Failed to build system context:', err);
+      return '';
+    }
+  }
+
+/**
  * POST /api/analysis/chat
- * AI 对话：指挥面板中的自由问答
+ * AI 对话：指挥面板中的自由问答，自动注入系统上下文
  *
  * Body: { messages: [{ role: 'user', content: '...' }] }
  */
@@ -143,7 +229,8 @@ export function createAnalysisRouter({
       return res.status(400).json({ error: `messages[] exceeds max length (${maxMessages})` });
     }
     try {
-      const reply = await chatFn(messages);
+      const systemContext = buildSystemContext(req.db);
+      const reply = await chatFn(messages, systemContext);
       res.json({ reply });
     } catch (err) {
       console.error('Chat failed:', getErrorMessage(err));

@@ -193,6 +193,9 @@ export const getApprovals = (params) => request(http.get('/approval', { params }
 export const respondApproval = (id, status, reason) =>
   request(http.patch(`/approval/${id}`, { status, reason }))
 
+// MCP
+export const getMcpServers = () => request(http.get('/analysis/mcp/servers'))
+
 // Audit
 /**
  * @param {Record<string, string | number>} params
@@ -215,8 +218,8 @@ export const getNotificationRules = () => request(http.get('/notifications/rules
 export const saveNotificationRule = (data) => request(http.put('/notifications/rules', data))
 export const getNotificationHistory = (params) => request(http.get('/notifications/history', { params }))
 
-// Settings
-export const getSettings = () => request(http.get('/settings'))
-export const updateSettings = (data) => request(http.put('/settings', data))
+// Settings (system_config table)
+export const getSettings = () => request(http.get('/config'))
+export const updateSettings = (data) => request(http.put('/config', data))
 
 export default http

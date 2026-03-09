@@ -525,6 +525,58 @@ async def status():
     )
 
 
+@app.get("/mcp/servers")
+async def mcp_servers():
+    """返回 MCP Server 列表及其工具定义"""
+    import yaml
+
+    # 读取配置获取 server 元信息
+    try:
+        with open(MCP_CONFIG_PATH) as f:
+            config = yaml.safe_load(f)
+        server_configs = {s["name"]: s for s in config.get("servers", [])}
+    except Exception:
+        server_configs = {}
+
+    # 读取 tool_policy
+    policy_path = os.path.join(os.path.dirname(MCP_CONFIG_PATH), "tool_policy.yaml")
+    tool_levels: dict[str, str] = {}
+    try:
+        with open(policy_path) as f:
+            policy = yaml.safe_load(f)
+        for level, tools in (policy.get("tool_levels") or {}).items():
+            for tool_name in (tools or []):
+                tool_levels[tool_name] = level
+    except Exception:
+        pass
+
+    connected = _mcp_client.get_connected_servers() if _mcp_client else []
+    tool_map = _mcp_client._tool_map if _mcp_client else {}
+    tool_defs = _mcp_client.list_tools() if _mcp_client else []
+
+    # 按 server 分组
+    servers_dict: dict[str, dict] = {}
+    for name in set(list(server_configs.keys()) + connected):
+        cfg = server_configs.get(name, {})
+        servers_dict[name] = {
+            "name": name,
+            "connected": name in connected,
+            "command": cfg.get("command", ""),
+            "args": cfg.get("args", []),
+            "tools": [],
+        }
+
+    for tool in tool_defs:
+        server_name = tool_map.get(tool["name"], "unknown")
+        if server_name in servers_dict:
+            servers_dict[server_name]["tools"].append({
+                **tool,
+                "policy": tool_levels.get(tool["name"], "auto"),
+            })
+
+    return {"servers": list(servers_dict.values())}
+
+
 @app.post("/approval/{approval_id}/respond")
 async def respond_approval(approval_id: int, response: ApprovalResponse):
     """审批响应 — 批准或拒绝工具调用"""

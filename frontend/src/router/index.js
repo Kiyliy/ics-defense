@@ -38,6 +38,12 @@ const routes = [
         meta: { title: '审批队列', icon: 'Checked', group: 'security' },
       },
       {
+        path: 'mcp',
+        name: 'MCP',
+        component: () => import('../views/McpView.vue'),
+        meta: { title: 'MCP 管理', icon: 'Cpu', group: 'system' },
+      },
+      {
         path: 'agent-logs',
         name: 'AgentLogs',
         component: () => import('../views/AgentLogView.vue'),
