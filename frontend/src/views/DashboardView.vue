@@ -68,16 +68,16 @@ onMounted(async () => {
     ])
 
     const summary = statsRes?.summary || {}
-    const bySeverity = statsRes?.alertsBySeverity || []
+    const bySeverity = statsRes?.alerts_by_severity || statsRes?.alertsBySeverity || []
     const highCount = bySeverity
       .filter((s) => s.severity === 'high' || s.severity === 'critical')
       .reduce((sum, s) => sum + (s.count || 0), 0)
 
     stats.value = {
-      total_alerts: summary.totalAlerts ?? 0,
+      total_alerts: summary.total_alerts ?? summary.totalAlerts ?? 0,
       high_alerts: highCount,
-      chains: summary.totalChains ?? 0,
-      pending_approvals: summary.pendingDecisions ?? 0,
+      chains: summary.total_chains ?? summary.totalChains ?? 0,
+      pending_approvals: summary.pending_decisions ?? summary.pendingDecisions ?? 0,
     }
 
     trendData.value = trendRes?.trend || []

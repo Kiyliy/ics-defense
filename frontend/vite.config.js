@@ -5,7 +5,7 @@ import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 
 const frontendPort = Number(process.env.FRONTEND_PORT || 5173)
-const backendTarget = process.env.VITE_API_TARGET || 'http://localhost:3002'
+const backendTarget = process.env.VITE_API_TARGET || 'http://localhost:8002'
 
 export default defineConfig({
   plugins: [

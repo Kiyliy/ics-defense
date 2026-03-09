@@ -28,20 +28,38 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { getNotificationRules, saveNotificationRule } from '../../api'
 
-const rules = ref([
-  { id: 1, event: '高危告警', channel: '飞书', enabled: true },
-  { id: 2, event: '审批请求', channel: '飞书', enabled: true },
-  { id: 3, event: '分析完成', channel: '飞书', enabled: false },
-  { id: 4, event: '攻击链更新', channel: '飞书', enabled: true },
-])
+const rules = ref([])
 
-function handleToggle(rule) {
-  const status = rule.enabled ? '已启用' : '已禁用'
-  ElMessage.success(`${rule.event} 通知${status}`)
+async function fetchRules() {
+  try {
+    const res = await getNotificationRules()
+    rules.value = res.rules || []
+  } catch (err) {
+    console.error('Failed to fetch notification rules:', err)
+    // Fallback to empty list on error
+    rules.value = []
+  }
 }
+
+async function handleToggle(rule) {
+  const status = rule.enabled ? '已启用' : '已禁用'
+  try {
+    await saveNotificationRule({ id: rule.id, enabled: rule.enabled })
+    ElMessage.success(`${rule.event} 通知${status}`)
+  } catch (err) {
+    // Revert toggle on failure
+    rule.enabled = !rule.enabled
+    ElMessage.error('更新规则失败')
+  }
+}
+
+onMounted(() => {
+  fetchRules()
+})
 </script>
 
 <style scoped>

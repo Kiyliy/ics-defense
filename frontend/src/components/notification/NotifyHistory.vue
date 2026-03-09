@@ -3,12 +3,13 @@
     <el-table
       v-if="history.length > 0"
       :data="paginatedData"
+      v-loading="loading"
       style="width: 100%"
       :show-header="true"
     >
       <el-table-column prop="time" label="时间" width="180">
         <template #default="{ row }">
-          <span class="time-text">{{ row.time }}</span>
+          <span class="time-text">{{ row.time || row.created_at || '' }}</span>
         </template>
       </el-table-column>
       <el-table-column prop="event" label="事件">
@@ -31,42 +32,65 @@
     </el-table>
 
     <!-- Empty State -->
-    <div v-else class="empty-state">
+    <div v-else-if="!loading" class="empty-state">
       <p class="empty-title">暂无发送记录</p>
       <p class="empty-desc">通知发送后将在此处显示历史记录</p>
     </div>
 
     <!-- Pagination -->
-    <div v-if="history.length > pageSize" class="pagination-row">
+    <div v-if="totalCount > pageSize" class="pagination-row">
       <el-pagination
         v-model:current-page="currentPage"
         :page-size="pageSize"
-        :total="history.length"
+        :total="totalCount"
         layout="prev, pager, next"
         small
+        @current-change="fetchHistory"
       />
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { getNotificationHistory } from '../../api'
 
 const currentPage = ref(1)
 const pageSize = 5
-
-const history = ref([
-  { id: 1, time: '2026-03-08 10:23:15', event: '高危告警：异常 Modbus 写入', channel: '飞书', status: 'success' },
-  { id: 2, time: '2026-03-08 09:45:02', event: '审批请求：隔离 PLC-07', channel: '飞书', status: 'success' },
-  { id: 3, time: '2026-03-07 18:30:44', event: '攻击链更新：CHAIN-0042', channel: '飞书', status: 'failed' },
-  { id: 4, time: '2026-03-07 14:12:08', event: '分析完成：告警 #1024', channel: '飞书', status: 'success' },
-  { id: 5, time: '2026-03-06 22:05:33', event: '高危告警：未授权固件更新', channel: '飞书', status: 'success' },
-  { id: 6, time: '2026-03-06 16:40:11', event: '审批请求：阻断网络段 C', channel: '飞书', status: 'success' },
-])
+const history = ref([])
+const totalCount = ref(0)
+const loading = ref(false)
 
 const paginatedData = computed(() => {
+  // If the backend handles pagination, return all items directly
+  // Otherwise, do client-side pagination as fallback
+  if (totalCount.value > 0 && history.value.length <= pageSize) {
+    return history.value
+  }
   const start = (currentPage.value - 1) * pageSize
   return history.value.slice(start, start + pageSize)
+})
+
+async function fetchHistory() {
+  loading.value = true
+  try {
+    const res = await getNotificationHistory({
+      limit: pageSize,
+      offset: (currentPage.value - 1) * pageSize,
+    })
+    history.value = res.history || []
+    totalCount.value = res.total ?? history.value.length
+  } catch (err) {
+    console.error('Failed to fetch notification history:', err)
+    history.value = []
+    totalCount.value = 0
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchHistory()
 })
 </script>
 

@@ -5,7 +5,12 @@ const { httpClient } = vi.hoisted(() => ({
     get: vi.fn(),
     post: vi.fn(),
     patch: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
     interceptors: {
+      request: {
+        use: vi.fn(),
+      },
       response: {
         use: vi.fn(),
       },
@@ -25,9 +30,15 @@ beforeEach(() => {
   httpClient.get.mockReset()
   httpClient.post.mockReset()
   httpClient.patch.mockReset()
+  httpClient.put.mockReset()
+  httpClient.delete.mockReset()
 })
 
 describe('frontend api client', () => {
+  it('registers request interceptor for auth token', () => {
+    expect(httpClient.interceptors.request.use).toHaveBeenCalled()
+  })
+
   it('registers response interceptor that unwraps data and rethrows errors', async () => {
     expect(httpClient.interceptors.response.use).toHaveBeenCalled()
 
@@ -81,5 +92,49 @@ describe('frontend api client', () => {
 
     expect(await api.getAuditStats()).toBe('get-ok')
     expect(httpClient.get).toHaveBeenLastCalledWith('/audit/stats', { params: {} })
+  })
+
+  it('maps notification helpers to http methods', async () => {
+    httpClient.get.mockResolvedValue('get-ok')
+    httpClient.post.mockResolvedValue('post-ok')
+    httpClient.put.mockResolvedValue('put-ok')
+    httpClient.delete.mockResolvedValue('delete-ok')
+
+    expect(await api.getNotificationChannels()).toBe('get-ok')
+    expect(httpClient.get).toHaveBeenLastCalledWith('/notifications/channels')
+
+    expect(await api.saveNotificationChannel({ type: 'feishu' })).toBe('post-ok')
+    expect(httpClient.post).toHaveBeenLastCalledWith('/notifications/channels', { type: 'feishu' })
+
+    expect(await api.testNotificationChannel(1)).toBe('post-ok')
+    expect(httpClient.post).toHaveBeenLastCalledWith('/notifications/channels/1/test')
+
+    expect(await api.deleteNotificationChannel(1)).toBe('delete-ok')
+    expect(httpClient.delete).toHaveBeenLastCalledWith('/notifications/channels/1')
+
+    expect(await api.getNotificationRules()).toBe('get-ok')
+    expect(httpClient.get).toHaveBeenLastCalledWith('/notifications/rules')
+
+    expect(await api.saveNotificationRule({ id: 1, enabled: true })).toBe('put-ok')
+    expect(httpClient.put).toHaveBeenLastCalledWith('/notifications/rules', { id: 1, enabled: true })
+
+    expect(await api.getNotificationHistory({ limit: 10 })).toBe('get-ok')
+    expect(httpClient.get).toHaveBeenLastCalledWith('/notifications/history', { params: { limit: 10 } })
+  })
+
+  it('maps settings helpers to http methods', async () => {
+    httpClient.get.mockResolvedValue('get-ok')
+    httpClient.put.mockResolvedValue('put-ok')
+
+    expect(await api.getSettings()).toBe('get-ok')
+    expect(httpClient.get).toHaveBeenLastCalledWith('/config')
+
+    expect(await api.updateSettings({ key: 'value' })).toBe('put-ok')
+    expect(httpClient.put).toHaveBeenLastCalledWith('/config', { key: 'value' })
+  })
+
+  it('exports activeRequests ref for loading state', () => {
+    expect(api.activeRequests).toBeDefined()
+    expect(api.activeRequests.value).toBe(0)
   })
 })

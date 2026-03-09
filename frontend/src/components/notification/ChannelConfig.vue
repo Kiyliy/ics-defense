@@ -51,18 +51,19 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import {
+  getNotificationChannels,
+  saveNotificationChannel,
+  testNotificationChannel,
+  deleteNotificationChannel,
+} from '../../api'
 
 const showForm = ref(false)
 const editingId = ref(null)
 const form = reactive({ type: 'feishu', webhook: '' })
-
-const channels = ref([
-  { id: 1, type: 'feishu', webhook: 'https://open.feishu.cn/open-apis/bot/v2/hook/abc123xyz', _testing: false }
-])
-
-let nextId = 2
+const channels = ref([])
 
 function toggleForm() {
   showForm.value = !showForm.value
@@ -82,31 +83,44 @@ function maskUrl(url) {
   return url.slice(0, 30) + '******' + url.slice(-6)
 }
 
-function addChannel() {
-  if (editingId.value !== null) {
-    const idx = channels.value.findIndex(c => c.id === editingId.value)
-    if (idx !== -1) {
-      channels.value[idx].type = form.type
-      channels.value[idx].webhook = form.webhook
-    }
-    editingId.value = null
-    ElMessage.success('渠道已更新')
-  } else {
-    channels.value.push({
-      id: nextId++,
-      type: form.type,
-      webhook: form.webhook,
-      _testing: false
-    })
-    ElMessage.success('渠道已添加')
+async function fetchChannels() {
+  try {
+    const res = await getNotificationChannels()
+    channels.value = (res.channels || []).map((ch) => ({ ...ch, _testing: false }))
+  } catch (err) {
+    console.error('Failed to fetch channels:', err)
   }
-  form.webhook = ''
-  showForm.value = false
 }
 
-function removeChannel(ch) {
-  channels.value = channels.value.filter(c => c.id !== ch.id)
-  ElMessage.success('渠道已删除')
+async function addChannel() {
+  try {
+    await saveNotificationChannel({
+      id: editingId.value,
+      type: form.type,
+      webhook: form.webhook,
+    })
+    if (editingId.value !== null) {
+      ElMessage.success('渠道已更新')
+      editingId.value = null
+    } else {
+      ElMessage.success('渠道已添加')
+    }
+    form.webhook = ''
+    showForm.value = false
+    await fetchChannels()
+  } catch (err) {
+    ElMessage.error('保存渠道失败')
+  }
+}
+
+async function removeChannel(ch) {
+  try {
+    await deleteNotificationChannel(ch.id)
+    ElMessage.success('渠道已删除')
+    await fetchChannels()
+  } catch (err) {
+    ElMessage.error('删除渠道失败')
+  }
 }
 
 function editChannel(ch) {
@@ -118,11 +132,19 @@ function editChannel(ch) {
 
 async function testChannel(ch) {
   ch._testing = true
-  // Simulate test
-  await new Promise(r => setTimeout(r, 800))
-  ch._testing = false
-  ElMessage.success(`已向 ${typeLabel(ch.type)} 发送测试通知`)
+  try {
+    await testNotificationChannel(ch.id)
+    ElMessage.success(`已向 ${typeLabel(ch.type)} 发送测试通知`)
+  } catch (err) {
+    ElMessage.error('测试通知发送失败')
+  } finally {
+    ch._testing = false
+  }
 }
+
+onMounted(() => {
+  fetchChannels()
+})
 </script>
 
 <style scoped>
