@@ -44,6 +44,7 @@ const SCHEMA = `
     asset_id      INTEGER REFERENCES assets(id),
     status        TEXT DEFAULT 'open',     -- lifecycle: open → analyzing → analyzed → resolved
     raw_event_id  INTEGER REFERENCES raw_events(id),
+    event_count   INTEGER DEFAULT 1,            -- 聚簇：关联的原始日志条数
     created_at    TEXT DEFAULT (datetime('now'))
   );
 
@@ -114,6 +115,15 @@ const SCHEMA = `
  * @type {Array<{ key: string, value: string, description: string }>}
  */
 const DEFAULT_CONFIG = [
+  // LLM 配置
+  { key: 'llm.model',        value: 'grok-3-mini-fast',       description: 'LLM 模型名称' },
+  { key: 'llm.base_url',     value: 'https://api.x.ai/v1',   description: 'OpenAI 兼容 API 地址' },
+  { key: 'llm.api_key',      value: '',                       description: 'API Key（敏感信息）' },
+  { key: 'llm.temperature',  value: '0.5',  description: 'Chat 默认 temperature（0-1）' },
+  { key: 'llm.max_tokens',   value: '4000', description: '最大输出 token 数' },
+  // 系统配置
+  { key: 'system.escalation_threshold', value: 'high',  description: '告警自动升级阈值（low/medium/high/critical）' },
+  { key: 'system.auto_approval',        value: 'false', description: '是否自动审批低于阈值的处置建议' },
   // 速率限制 — 全局
   { key: 'rate_limit.global.window_ms',   value: '900000',  description: '全局速率限制窗口（毫秒），默认 15 分钟' },
   { key: 'rate_limit.global.max',         value: '500',     description: '全局速率限制窗口内最大请求数' },
@@ -126,6 +136,14 @@ const DEFAULT_CONFIG = [
   // 事件接入
   { key: 'ingest.max_batch_size',         value: '1000',    description: '单次 ingest 最大事件数' },
   { key: 'ingest.valid_sources',          value: 'waf,nids,hids,pikachu,soc', description: '允许的事件来源（逗号分隔）' },
+  { key: 'ingest.clustering_window_hours', value: '1',      description: '告警聚类时间窗口（小时），相同告警在窗口内合并计数' },
+  // Agent 服务
+  { key: 'agent.service_url',   value: 'http://localhost:8002', description: 'Agent 服务地址' },
+  // 通知
+  { key: 'notification.provider',       value: 'feishu',  description: '通知渠道（feishu / feishu-app / noop）' },
+  { key: 'notification.max_retries',    value: '5',       description: '通知发送最大重试次数' },
+  { key: 'notification.base_delay_ms',  value: '1000',    description: '通知重试基础延迟（毫秒）' },
+  { key: 'notification.max_delay_ms',   value: '30000',   description: '通知重试最大延迟（毫秒）' },
   // 对话
   { key: 'chat.max_messages',             value: '50',      description: 'chat 接口单次最大消息数' },
   // 请求体
@@ -142,6 +160,13 @@ export function initDB(dbPath) {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
+
+  // Migration: add event_count column to existing databases
+  try {
+    db.prepare('SELECT event_count FROM alerts LIMIT 1').get();
+  } catch {
+    db.exec('ALTER TABLE alerts ADD COLUMN event_count INTEGER DEFAULT 1');
+  }
 
   // Seed default config (INSERT OR IGNORE — never overwrite existing values)
   const upsert = db.prepare(

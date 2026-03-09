@@ -33,6 +33,13 @@
           <span class="source-chip">{{ row.source?.toUpperCase() }}</span>
         </template>
       </el-table-column>
+      <el-table-column prop="event_count" label="关联日志" width="100" align="center">
+        <template #default="{ row }">
+          <span class="event-count-badge" :class="{ 'event-count-badge--multi': (row.event_count || 1) > 1 }">
+            {{ row.event_count || 1 }}
+          </span>
+        </template>
+      </el-table-column>
       <el-table-column prop="title" label="告警标题" min-width="260">
         <template #default="{ row }">
           <span class="cell-title" :title="row.title">{{ row.title }}</span>
@@ -186,6 +193,26 @@ function onSelectionChange(rows) {
   font-size: 0.78rem;
   font-weight: 600;
   letter-spacing: 0.03em;
+}
+
+.event-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: var(--radius-full, 999px);
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: var(--font-mono, monospace);
+  background: var(--bg-hover, #f3f4f6);
+  color: var(--text-muted, #9ca3af);
+}
+
+.event-count-badge--multi {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--accent, #3b82f6);
 }
 
 .cell-title {

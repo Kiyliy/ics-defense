@@ -51,10 +51,21 @@ router.post('/ingest', (/** @type {any} */ req, /** @type {any} */ res) => {
   const insertRaw = db.prepare(
     'INSERT INTO raw_events (source, raw_json) VALUES (?, ?)'
   );
-  const insertAlert = db.prepare(`
-    INSERT INTO alerts (source, severity, title, description, src_ip, dst_ip, mitre_tactic, mitre_technique, raw_event_id)
-    VALUES (@source, @severity, @title, @description, @src_ip, @dst_ip, @mitre_tactic, @mitre_technique, @raw_event_id)
+  const findSimilar = db.prepare(`
+    SELECT id FROM alerts
+    WHERE source = @source AND title = @title AND severity = @severity
+      AND created_at >= datetime('now', '-' || @window_hours || ' hours')
+    ORDER BY created_at DESC LIMIT 1
   `);
+  const incrementCount = db.prepare(
+    'UPDATE alerts SET event_count = event_count + 1 WHERE id = ?'
+  );
+  const insertAlert = db.prepare(`
+    INSERT INTO alerts (source, severity, title, description, src_ip, dst_ip, mitre_tactic, mitre_technique, raw_event_id, event_count)
+    VALUES (@source, @severity, @title, @description, @src_ip, @dst_ip, @mitre_tactic, @mitre_technique, @raw_event_id, 1)
+  `);
+
+  const clusteringWindow = getConfigInt('ingest.clustering_window_hours', 1);
 
   /** @type {Record<string, unknown>[]} */
   const results = [];
@@ -63,8 +74,16 @@ router.post('/ingest', (/** @type {any} */ req, /** @type {any} */ res) => {
       const rawResult = insertRaw.run(source, JSON.stringify(event));
       const normalized = normalize(source, event);
       normalized.raw_event_id = rawResult.lastInsertRowid;
-      const alertResult = insertAlert.run(normalized);
-      results.push({ id: Number(alertResult.lastInsertRowid), ...normalized });
+
+      // 聚簇：同 source + title + severity 在窗口内的归并
+      const existing = findSimilar.get({ ...normalized, window_hours: clusteringWindow });
+      if (existing) {
+        incrementCount.run(existing.id);
+        results.push({ id: existing.id, clustered: true, ...normalized });
+      } else {
+        const alertResult = insertAlert.run(normalized);
+        results.push({ id: Number(alertResult.lastInsertRowid), ...normalized });
+      }
     }
   });
 
