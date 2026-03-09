@@ -137,11 +137,13 @@ async def analysis_chat(body: AnalysisChatRequest):
 
         # Use the LLM directly (ported from Express chat logic)
         from openai import AsyncOpenAI
-        from agent.agent import DEFAULT_MODEL, DEFAULT_BASE_URL
+        from agent.agent import DEFAULT_BASE_URL
+        from agent.db import get_sys_config
 
+        db_path = os.environ.get("DB_PATH", "data/ics_defense.db")
         client = AsyncOpenAI(
-            api_key=os.environ.get("XAI_API_KEY"),
-            base_url=os.environ.get("XAI_BASE_URL", DEFAULT_BASE_URL),
+            api_key=get_sys_config("xai_api_key", "", db_path),
+            base_url=get_sys_config("llm_base_url", DEFAULT_BASE_URL, db_path),
         )
 
         chat_system_prompt = (

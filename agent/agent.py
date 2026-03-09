@@ -24,7 +24,7 @@ from agent.policy import ToolPolicy
 from agent.audit import AuditLogger
 from agent.hooks import HookManager
 from agent.memory import AgentMemory
-from agent.config import cfg
+from agent.db import get_sys_config
 
 # Phase modules
 from agent.planning import run_planning
@@ -57,10 +57,37 @@ logger = logging.getLogger(__name__)
 # 默认配置
 # ---------------------------------------------------------------------------
 
-DEFAULT_MODEL = cfg.llm.model or "grok-3-mini-fast"
-DEFAULT_BASE_URL = cfg.llm.base_url or "https://api.x.ai/v1"
-DEFAULT_DB_PATH = cfg.db_path or "./data/ics_defense.db"
-DEFAULT_GUARD_CONFIG = cfg.guard_dict()
+# 回退默认值
+_FALLBACK_MODEL = "grok-3-mini-fast"
+_FALLBACK_BASE_URL = "https://api.x.ai/v1"
+
+# 启动配置（仅环境变量）
+DEFAULT_DB_PATH = os.environ.get("DB_PATH", "data/ics_defense.db")
+
+# 运行时配置：惰性读取 system_config 表，环境变量作为回退
+DEFAULT_MODEL = os.environ.get("XAI_MODEL", _FALLBACK_MODEL)
+DEFAULT_BASE_URL = os.environ.get("XAI_BASE_URL", _FALLBACK_BASE_URL)
+
+
+def get_runtime_model(db_path: str | None = None) -> str:
+    """从 system_config 表读取 LLM 模型（支持运行时热切换）。"""
+    return get_sys_config("llm_model", "", db_path or DEFAULT_DB_PATH) or DEFAULT_MODEL
+
+
+def get_runtime_base_url(db_path: str | None = None) -> str:
+    """从 system_config 表读取 LLM base_url。"""
+    return get_sys_config("llm_base_url", "", db_path or DEFAULT_DB_PATH) or DEFAULT_BASE_URL
+
+
+def get_runtime_guard_config(db_path: str | None = None) -> dict:
+    """从 system_config 表读取 guard 配置。"""
+    db = db_path or DEFAULT_DB_PATH
+    return {
+        "max_steps": int(get_sys_config("guard_max_steps", "20", db)),
+        "step_timeout": int(get_sys_config("guard_step_timeout", "30", db)),
+        "total_timeout": int(get_sys_config("guard_total_timeout", "300", db)),
+        "max_retries": int(get_sys_config("guard_max_retries", "2", db)),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -101,15 +128,15 @@ async def agent_loop(
     """
     # --- 初始化 ---
     trace_id = trace_id or str(uuid4())
-    db_path = db_path or os.environ.get("DB_PATH", DEFAULT_DB_PATH)
-    model = model or DEFAULT_MODEL
-    base_url = base_url or DEFAULT_BASE_URL
+    db_path = db_path or DEFAULT_DB_PATH
+    model = model or get_runtime_model(db_path)
+    base_url = base_url or get_runtime_base_url(db_path)
 
     client = OpenAI(
-        api_key=api_key or cfg.llm.api_key or os.environ.get("XAI_API_KEY"),
+        api_key=api_key or get_sys_config("xai_api_key", "", db_path),
         base_url=base_url,
     )
-    guard = AgentGuard(guard_config or DEFAULT_GUARD_CONFIG)
+    guard = AgentGuard(guard_config or get_runtime_guard_config(db_path))
     guard.reset()
 
     try:

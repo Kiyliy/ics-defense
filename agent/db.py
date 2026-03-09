@@ -421,3 +421,25 @@ def execute_many(
         cursor = conn.executemany(sql, params_seq)
         conn.commit()
         return cursor.rowcount
+
+
+# ---------------------------------------------------------------------------
+# System config helpers (读取 system_config 表)
+# ---------------------------------------------------------------------------
+
+def get_sys_config(key: str, default: str = "", db_path: str | None = None) -> str:
+    """从 system_config 表读取配置值，不存在则返回 default。"""
+    row = query_one(
+        "SELECT value FROM system_config WHERE key = ?", (key,), db_path
+    )
+    return row["value"] if row else default
+
+
+def set_sys_config(key: str, value: str, db_path: str | None = None) -> None:
+    """写入或更新 system_config 表中的配置值。"""
+    execute(
+        "INSERT INTO system_config (key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (key, value),
+        db_path,
+    )

@@ -39,22 +39,40 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from agent.db import get_db, init_db
+from agent.db import get_db, init_db, get_sys_config
 from agent.agent import agent_loop, DEFAULT_MODEL, DEFAULT_BASE_URL
 from agent.audit import AuditLogger
 from agent.mcp_client import MCPClient, create_client_from_config
-from agent.config import cfg
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# 配置 (sourced from unified config singleton)
+# 配置
+#   - 环境变量: 启动必须的 (DB_PATH, PORT) 和敏感信息 (API_KEY, AUTH_TOKEN)
+#   - system_config 表: 运行时可调的 (model, base_url, cors, guard 等)
 # ---------------------------------------------------------------------------
 
-DB_PATH = cfg.db_path
-MCP_CONFIG_PATH = cfg.mcp_servers_abs
-LLM_MODEL = cfg.llm.model or DEFAULT_MODEL
-API_AUTH_TOKEN = cfg.auth.token
+# 启动配置 (环境变量)
+DB_PATH = os.environ.get("DB_PATH", "data/ics_defense.db")
+MCP_CONFIG_PATH = os.environ.get("MCP_CONFIG_PATH", "agent/mcp_servers.yaml")
+def _get_api_auth_token() -> str:
+    """从 system_config 表读取 API 认证 token。"""
+    return get_sys_config("api_auth_token", "", DB_PATH)
+
+
+def _get_llm_model() -> str:
+    """从 system_config 表读取 LLM 模型，支持运行时切换。"""
+    return get_sys_config("llm_model", DEFAULT_MODEL, DB_PATH)
+
+
+def _get_llm_base_url() -> str:
+    """从 system_config 表读取 LLM base_url，支持运行时切换。"""
+    return get_sys_config("llm_base_url", DEFAULT_BASE_URL, DB_PATH)
+
+
+def _get_api_key() -> str:
+    """从 system_config 表读取 LLM API Key。"""
+    return get_sys_config("xai_api_key", "", DB_PATH)
 
 # 全局状态
 _mcp_client: Optional[MCPClient] = None
@@ -74,7 +92,7 @@ limiter = Limiter(key_func=get_remote_address)
 class AnalyzeRequest(BaseModel):
     """分析请求"""
     alert_ids: list[int] = Field(..., min_length=1, description="需要分析的告警 ID 列表")
-    model: str = Field(default=LLM_MODEL, description="使用的 LLM 模型")
+    model: str | None = Field(default=None, description="使用的 LLM 模型，为空则从 system_config 读取")
 
 
 class AnalyzeResponse(BaseModel):
@@ -93,7 +111,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     """聊天请求"""
     messages: list[ChatMessage]
-    model: str = Field(default=LLM_MODEL, description="使用的 LLM 模型")
+    model: str | None = Field(default=None, description="使用的 LLM 模型，为空则从 system_config 读取")
 
 
 class ChatResponse(BaseModel):
@@ -182,7 +200,10 @@ app.state.limiter = limiter
 # CORS middleware
 # ---------------------------------------------------------------------------
 
-_cors_origins = cfg.server.cors_origins
+_cors_default = "http://localhost:5173,http://localhost:5174"
+_cors_origins = get_sys_config("cors_origins", "", DB_PATH) or os.environ.get("CORS_ORIGINS", _cors_default)
+if isinstance(_cors_origins, str):
+    _cors_origins = [o.strip() for o in _cors_origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
@@ -227,7 +248,8 @@ async def auth_middleware(request: Request, call_next):
         return await call_next(request)
 
     # Skip auth if no token configured (dev mode)
-    if not API_AUTH_TOKEN:
+    auth_token = _get_api_auth_token()
+    if not auth_token:
         return await call_next(request)
 
     auth_header = request.headers.get("authorization", "")
@@ -235,7 +257,7 @@ async def auth_middleware(request: Request, call_next):
     bearer_token = auth_header[7:] if auth_header.startswith("Bearer ") else ""
     token = bearer_token or api_key_header
 
-    if not token or not _safe_compare(token, API_AUTH_TOKEN):
+    if not token or not _safe_compare(token, auth_token):
         return Response(
             content=json.dumps({"error": "Unauthorized: invalid or missing API token"}),
             status_code=401,
@@ -455,7 +477,8 @@ async def analyze(request: AnalyzeRequest):
     trace_id = str(uuid4())
 
     loop = asyncio.get_running_loop()
-    task = loop.create_task(_run_analysis(trace_id, clustered, request.model))
+    model = request.model or _get_llm_model()
+    task = loop.create_task(_run_analysis(trace_id, clustered, model))
 
     started_at = datetime.now().isoformat()
     _running_tasks[trace_id] = {
@@ -556,9 +579,11 @@ async def chat(request: ChatRequest):
     """与 LLM 直接对话（简单聊天接口）"""
     try:
         client = AsyncOpenAI(
-            api_key=cfg.llm.api_key or os.environ.get("XAI_API_KEY"),
-            base_url=cfg.llm.base_url or DEFAULT_BASE_URL,
+            api_key=_get_api_key(),
+            base_url=_get_llm_base_url(),
         )
+
+        model = request.model or _get_llm_model()
 
         messages = [
             {"role": "system", "content": "你是一个工控安全分析助手。"},
@@ -568,7 +593,7 @@ async def chat(request: ChatRequest):
         ]
 
         response = await client.chat.completions.create(
-            model=request.model,
+            model=model,
             max_tokens=4096,
             messages=messages,
         )

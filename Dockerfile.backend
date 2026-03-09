@@ -16,9 +16,6 @@ RUN apt-get update && \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 复制统一配置
-COPY config.yaml .
-
 # 复制 Agent 核心模块
 COPY agent/ ./agent/
 

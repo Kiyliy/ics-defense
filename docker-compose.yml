@@ -3,7 +3,7 @@
 #
 # 环境变量:
 #   公共变量放在 .env 文件，由 compose 通过 env_file 注入。
-#   config.yaml 为配置主源，环境变量可覆盖其中的值。
+#   配置方式: 环境变量(.env) + 数据库(system_config表)
 
 x-app-env: &app-env
   env_file:
@@ -52,7 +52,7 @@ services:
         condition: service_healthy
     volumes:
       - ics-data:/app/data
-      - ./config.yaml:/app/config.yaml:ro
+      - ./agent:/app/agent:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/api/health')"]

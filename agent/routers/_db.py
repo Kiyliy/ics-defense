@@ -6,13 +6,12 @@ Uses the unified agent.db module for database access.
 
 from __future__ import annotations
 
+import os
 import sqlite3
 
 from agent.db import get_db as _get_db_ctx, _local, _get_db_path, _ensure_data_dir
-from agent.config import cfg
 
-
-DB_PATH = cfg.db_path
+DB_PATH = os.environ.get("DB_PATH", "data/ics_defense.db")
 
 
 def get_db(db_path: str | None = None) -> sqlite3.Connection:
